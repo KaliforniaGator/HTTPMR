@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTTPMR - Security Scanner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input[type="text"],
+        input[type="url"],
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+        
+        input[type="text"]:focus,
+        input[type="url"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        input[type="file"] {
+            padding: 12px 15px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button, .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .btn-danger {
+            background: #ef5350;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #e53935;
+        }
+        
+        .btn-success {
+            background: #66bb6a;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #43a047;
+        }
+        
+        .reports-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .report-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border-left: 4px solid #667eea;
+        }
+        
+        .report-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .report-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            word-break: break-all;
+            font-size: 0.9em;
+        }
+        
+        .report-meta {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .report-url {
+            color: #667eea;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        
+        .severity-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .severity-critical {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .severity-high {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        .severity-medium {
+            background: #fff8e1;
+            color: #f57f17;
+        }
+        
+        .severity-low {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .report-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .report-actions .btn {
+            flex: 1;
+            min-width: 100px;
+            font-size: 0.85em;
+            padding: 8px 12px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .empty-state-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+        
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        
+        @media (max-width: 768px) {
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+            
+            .reports-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 HTTPMR Security Scanner</h1>
+            <p class="subtitle">HTTP & Web Vulnerability Assessment Tool</p>
+        </header>
+
+        <div class="two-column">
+            <!-- Left Column: Scan Controls -->
+            <div>
+                <div class="card">
+                    <h2>🚀 Start New Scan</h2>
+                    <form id="scanForm">
+                        <div class="form-group">
+                            <label for="target">Target URL</label>
+                            <input type="url" id="target" name="target" placeholder="https://example.com" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="mode">Scan Mode</label>
+                            <select id="mode" name="mode">
+                                <option value="auto">Auto (Full Scan)</option>
+                                <option value="wordpress">WordPress Only</option>
+                                <option value="headers">Security Headers Only</option>
+                                <option value="server">Server Detection Only</option>
+                            </select>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-primary">Start Scan</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>📤 Upload Report</h2>
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="file">Choose JSON Report</label>
+                            <input type="file" id="file" name="file" accept="application/json" required />
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-secondary">Upload</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right Column: Recent Reports -->
+            <div>
+                <div class="card">
+                    <h2>📋 Recent Reports</h2>
+                    {% if reports %}
+                        <div style="max-height: 600px; overflow-y: auto;">
+                            {% for item in reports[:5] %}
+                                <div style="padding: 12px 0; border-bottom: 1px solid #eee;">
+                                    <div class="report-title">{{ item.filename }}</div>
+                                    {% if item.summary.url %}
+                                        <div class="report-url">{{ item.summary.url }}</div>
+                                    {% endif %}
+                                    {% if item.summary.vuln_count %}
+                                        <span class="severity-badge severity-high">{{ item.summary.vuln_count }} Vulnerabilities</span>
+                                    {% else %}
+                                        <span class="severity-badge severity-low">Clean</span>
+                                    {% endif %}
+                                    <div style="margin-top: 8px; font-size: 0.85em; color: #999;">{{ item.summary.timestamp }}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📭</div>
+                            <p>No reports yet</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- All Reports Section -->
+        <div class="card">
+            <h2>📊 All Reports</h2>
+            {% if reports %}
+                <div class="reports-grid">
+                    {% for item in reports %}
+                        <div class="report-card">
+                            <div class="report-title">{{ item.filename }}</div>
+                            {% if item.summary.url %}
+                                <div class="report-url">{{ item.summary.url }}</div>
+                            {% endif %}
+                            {% if item.summary.timestamp %}
+                                <div class="report-meta">📅 {{ item.summary.timestamp }}</div>
+                            {% endif %}
+                            {% if item.summary.vuln_count %}
+                                <span class="severity-badge severity-high">{{ item.summary.vuln_count }} Vulns</span>
+                            {% else %}
+                                <span class="severity-badge severity-low">Clean</span>
+                            {% endif %}
+                            {% if item.summary.security_score %}
+                                <span class="severity-badge" style="background: #f3e5f5; color: #6a1b9a;">Score: {{ item.summary.security_score }}</span>
+                            {% endif %}
+                            <div class="report-actions">
+                                <a href="/view?name={{ item.filename }}" class="btn btn-primary">View</a>
+                                <button class="btn btn-success" onclick="convertSarif('{{ item.filename }}')">SARIF</button>
+                                <button class="btn btn-danger" onclick="deleteReport('{{ item.filename }}')">Delete</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <p>No reports found. Start a scan or upload one to get started!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const scanForm = document.getElementById('scanForm');
+        const uploadForm = document.getElementById('uploadForm');
+
+        scanForm.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const fd = new FormData(scanForm);
+            try {
+                const res = await fetch('/run', {method:'POST', body: fd});
+                const data = await res.json();
+                if(data.job_id) {
+                    window.location = '/run/' + data.job_id;
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown'));
+                }
+            } catch(e) {
+                alert('Failed to start scan: ' + e.message);
+            }
+        });
+
+        uploadForm.addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const fd = new FormData(uploadForm);
+            try {
+                const res = await fetch('/upload', {method:'POST', body: fd});
+                if(res.redirected) {
+                    window.location = res.url;
+                } else {
+                    alert('Upload failed');
+                }
+            } catch(e) {
+                alert('Failed to upload: ' + e.message);
+            }
+        });
+
+        function deleteReport(filename) {
+            if(!confirm('Are you sure you want to delete ' + filename + '?')) return;
+            const fd = new FormData();
+            fd.append('name', filename);
+            fetch('/delete_report', {method:'POST', body: fd})
+                .then(r => r.json())
+                .then(data => {
+                    if(data.status === 'deleted') {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown'));
+                    }
+                })
+                .catch(e => alert('Delete failed: ' + e.message));
+        }
+
+        function convertSarif(filename) {
+            const fd = new FormData();
+            fd.append('name', filename);
+            fetch('/convert_sarif', {method:'POST', body: fd})
+                .then(r => r.json())
+                .then(data => {
+                    if(data.status === 'converted') {
+                        alert('SARIF conversion successful! You can download it now.');
+                        const a = document.createElement('a');
+                        a.href = '/download_sarif?name=' + encodeURIComponent(filename);
+                        a.click();
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown'));
+                    }
+                })
+                .catch(e => alert('Conversion failed: ' + e.message));
+        }
+    </script>
+</body>
+</html>

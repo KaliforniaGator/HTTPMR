@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>HTTPMR - Reports & Scan Runner</title>
+    <style>
+      body{font-family:Arial;max-width:900px;margin:2rem auto;padding:1rem}
+      h1{color:#1f618d}
+      table{width:100%;border-collapse:collapse}
+      td,th{border:1px solid #ddd;padding:.5rem}
+      .btn{padding:.4rem .7rem;background:#1f618d;color:#fff;border-radius:4px;text-decoration:none}
+      form .row{margin:.5rem 0}
+    </style>
+  </head>
+  <body>
+    <h1>HTTPMR - Reports & Scan Runner</h1>
+
+    <h2>Start a Scan</h2>
+    <form id="scanForm" action="/run" method="post">
+      <div class="row">
+        <label>Target URL: <input type="text" name="target" placeholder="https://example.com" required style="width:60%" /></label>
+      </div>
+      <div class="row">
+        <label>Mode: <select name="mode"><option value="auto">Auto (default)</option></select></label>
+      </div>
+      <div class="row">
+        <button type="submit" class="btn">Start Scan</button>
+      </div>
+    </form>
+
+    <h2>Upload a report</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <input type="file" name="file" accept="application/json" required />
+      <button type="submit" class="btn">Upload</button>
+    </form>
+
+    <h2>Available reports</h2>
+    {% if reports %}
+      <table>
+        <tr><th>Filename</th><th>Actions</th></tr>
+        {% for r in reports %}
+        <tr>
+          <td>{{ r }}</td>
+          <td>
+            <a class="btn" href="/view?name={{ r }}">View</a>
+            <form style="display:inline" method="post" action="/run_tester">
+              <input type="hidden" name="report" value="{{ r }}" />
+              <button class="btn">Run Tester</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p>No reports found in repository root.</p>
+    {% endif %}
+
+    <script>
+      const form = document.getElementById('scanForm');
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(form);
+        const res = await fetch('/run', {method:'POST', body: fd});
+        const data = await res.json();
+        if(data.job_id){
+          window.location = '/run/' + data.job_id;
+        } else {
+          alert('Failed to start job: ' + JSON.stringify(data));
+        }
+      });
+
+      // intercept tester forms to call API and redirect to job page
+      document.querySelectorAll('form[action="/run_tester"]').forEach(form => {
+        form.addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(form);
+          const res = await fetch('/run_tester', {method:'POST', body: fd});
+          const data = await res.json();
+          if(data.job_id){
+            window.location = '/run/' + data.job_id;
+          } else {
+            alert('Failed to start tester: ' + JSON.stringify(data));
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
