@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 import os
 import json
 import uuid
+import time
 import asyncio
 import shlex
 import sys
@@ -43,6 +44,67 @@ def _get_report_summary(path):
         }
     except Exception as e:
         return {'error': str(e)}
+
+
+def _normalize_report(path):
+    """Ensure reports have a consistent top-level shape with a `tests` dict.
+    Converts legacy single-request reports (which contain `test_config`/`response`)
+    into a normalized report with `url`, `timestamp`, and `tests` entries so the
+    WebUI templates can rely on a consistent schema.
+    The original content is preserved under a `legacy` key.
+    """
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+
+        # If already normalized, nothing to do
+        if isinstance(data, dict) and data.get('tests'):
+            return True
+
+        new = {}
+        # Preserve original under legacy
+        new['legacy'] = data
+
+        # Map known fields
+        # Try to find a URL
+        url = data.get('url') or (data.get('test_config') or {}).get('url') or (data.get('response') or {}).get('url')
+        new['url'] = url
+        new['timestamp'] = data.get('timestamp') or data.get('test_config', {}).get('timestamp') or time.strftime('%Y-%m-%d %H:%M:%S')
+
+        tests = {}
+        # If this was an auto_mode report (has tests already but at top-level), move it
+        if 'tests' in data:
+            tests = data['tests']
+        else:
+            # Single-request report: include under a 'general' test
+            general = {
+                'test_config': data.get('test_config'),
+                'response': data.get('response'),
+                'analysis': data.get('analysis')
+            }
+            if data.get('wordpress_analysis'):
+                tests['wordpress'] = data.get('wordpress_analysis')
+            tests['general'] = general
+
+        new['tests'] = tests
+
+        # Write back normalized report (overwrite)
+        with open(path, 'w') as f:
+            json.dump(new, f, indent=2)
+
+        # Try writing SARIF if exporter available
+        try:
+            import sarif_exporter
+            sarif = sarif_exporter.convert_report_to_sarif(new)
+            sarif_path = path.replace('.json', '.sarif.json')
+            with open(sarif_path, 'w') as sf:
+                json.dump(sarif, sf, indent=2)
+        except Exception:
+            pass
+
+        return True
+    except Exception:
+        return False
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -149,6 +211,12 @@ async def _run_httpmr_job(job_id: str, target: str, outpath: str, mode: str = 'a
         await job['queue'].put(text)
 
     rc = await proc.wait()
+    # try to normalize the report file so the UI sees a consistent structure
+    try:
+        _normalize_report(outpath)
+    except Exception:
+        pass
+
     finished_msg = f"[JOB_FINISHED] rc={rc} out={outpath}"
     job['history'].append(finished_msg)
     await job['queue'].put(finished_msg)

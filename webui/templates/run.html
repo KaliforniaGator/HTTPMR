@@ -6,149 +6,24 @@
     <title>HTTPMR - Running Scan</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-        }
-        
-        .header {
-            margin-bottom: 30px;
-        }
-        
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .back-link:hover {
-            color: #764ba2;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2em;
-        }
-        
-        .target-info {
-            color: #666;
-            font-size: 1.1em;
-            margin-bottom: 5px;
-        }
-        
-        .output-file {
-            color: #999;
-            font-size: 0.9em;
-            font-family: monospace;
-            word-break: break-all;
-        }
-        
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
-            flex-wrap: wrap;
-        }
-        
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.95em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        #log {
-            background: #0d1117;
-            color: #c9d1d9;
-            padding: 20px;
-            height: 500px;
-            overflow-y: auto;
-            font-family: "Courier New", monospace;
-            border-radius: 8px;
-            font-size: 0.9em;
-            line-height: 1.5;
-            border: 1px solid #30363d;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        .log-line {
-            margin: 0;
-        }
-        
-        .status {
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-weight: 500;
-        }
-        
-        .status-running {
-            background: #e3f2fd;
-            color: #1565c0;
-        }
-        
-        .status-finished {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-        
-        .status-error {
-            background: #ffebee;
-            color: #c62828;
-        }
-        
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid transparent;
-            border-radius: 50%;
-            border-top-color: currentColor;
-            animation: spin 0.8s linear infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f6f8fb; color:#111827; min-height:100vh; padding:20px; }
+        .container { max-width: 980px; margin: 0 auto; }
+        .card { background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 6px 18px rgba(16,24,40,0.04); }
+        .back-link { color: #2563eb; text-decoration:none; font-weight:600; display:inline-block; margin-bottom:12px; }
+        h1 { font-size:1.4rem; color:#0f172a; margin-bottom:6px; }
+        .target-info { color:#475569; margin-bottom:6px; }
+        .output-file { color:#6b7280; font-family: monospace; font-size:0.9rem; word-break:break-all; }
+        .controls { display:flex; gap:10px; margin:12px 0; }
+        button { padding:10px 16px; border-radius:6px; border:none; font-weight:700; cursor:pointer; }
+        .btn-primary { background:#2563eb; color:#fff; }
+        .btn-primary:disabled { opacity:0.6; cursor:not-allowed; }
+        #log { background: #0b1220; color:#d1d5db; padding:16px; height:420px; overflow:auto; font-family:monospace; border-radius:6px; font-size:0.9rem; line-height:1.4; }
+        .status { padding:8px 12px; border-radius:6px; margin-bottom:12px; font-weight:700; }
+        .status-running { background:#e6f0ff; color:#1e3a8a; }
+        .status-finished { background:#ecfdf5; color:#166534; }
+        .status-error { background:#fff1f2; color:#9f1239; }
+        .spinner { display:inline-block; width:14px; height:14px; border:2px solid transparent; border-top-color:currentColor; border-radius:50%; animation:spin .8s linear infinite; }
+        @keyframes spin { to{ transform:rotate(360deg);} }
     </style>
 </head>
 <body>
@@ -175,21 +50,31 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.0.0/ansi_up.min.js"></script>
     <script>
         const jobId = "{{ job_id }}";
         const outpath = "{{ outpath }}";
         const reportName = outpath.split('/').pop();
-        const ws = new WebSocket(`ws://${location.host}/ws/${jobId}`);
+        const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/${jobId}`);
         const log = document.getElementById('log');
         const downloadBtn = document.getElementById('downloadBtn');
         const viewBtn = document.getElementById('viewBtn');
         const statusDiv = document.getElementById('status');
         
         let logContent = [];
+        const ansi_up = new AnsiUp();
+
+        function escapeHtml(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
 
         function appendLine(s) {
-            logContent.push(s);
-            log.innerText = logContent.join('\n');
+            // Convert ANSI escapes to HTML while escaping any raw HTML
+            const safe = escapeHtml(s);
+            const colored = ansi_up.ansi_to_html(safe);
+            logContent.push(colored);
+            log.innerHTML = logContent.join('<br/>');
             log.scrollTop = log.scrollHeight;
         }
 

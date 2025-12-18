@@ -6,259 +6,57 @@
     <title>HTTPMR - Security Scanner</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f6f8fb;
+            color: #1f2937;
             min-height: 100vh;
-            padding: 20px;
+            padding: 24px;
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
-        
-        h1 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 2.5em;
-        }
-        
-        .subtitle {
-            color: #666;
-            font-size: 1.1em;
-        }
-        
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(10px);
-        }
-        
-        .card h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 1.5em;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-        
-        input[type="text"],
-        input[type="url"],
-        select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1em;
-            transition: all 0.3s ease;
-        }
-        
-        input[type="text"]:focus,
-        input[type="url"]:focus,
-        select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        input[type="file"] {
-            padding: 12px 15px;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        button, .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
-        }
-        
-        .btn-secondary:hover {
-            background: #e0e0e0;
-        }
-        
-        .btn-danger {
-            background: #ef5350;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #e53935;
-        }
-        
-        .btn-success {
-            background: #66bb6a;
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background: #43a047;
-        }
-        
-        .reports-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-        }
-        
-        .report-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            transition: all 0.3s ease;
-            border-left: 4px solid #667eea;
-        }
-        
-        .report-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
-        }
-        
-        .report-title {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 10px;
-            word-break: break-all;
-            font-size: 0.9em;
-        }
-        
-        .report-meta {
-            font-size: 0.9em;
-            color: #666;
-            margin-bottom: 5px;
-        }
-        
-        .report-url {
-            color: #667eea;
-            font-weight: 500;
-            margin-bottom: 10px;
-        }
-        
-        .severity-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-            margin-right: 10px;
-        }
-        
-        .severity-critical {
-            background: #ffebee;
-            color: #c62828;
-        }
-        
-        .severity-high {
-            background: #fff3e0;
-            color: #e65100;
-        }
-        
-        .severity-medium {
-            background: #fff8e1;
-            color: #f57f17;
-        }
-        
-        .severity-low {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-        
-        .report-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .report-actions .btn {
-            flex: 1;
-            min-width: 100px;
-            font-size: 0.85em;
-            padding: 8px 12px;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 40px;
-            color: #999;
-        }
-        
-        .empty-state-icon {
-            font-size: 3em;
-            margin-bottom: 20px;
-        }
-        
-        .two-column {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-        }
-        
-        @media (max-width: 768px) {
-            .two-column {
-                grid-template-columns: 1fr;
-            }
-            
-            .reports-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            h1 {
-                font-size: 2em;
-            }
-        }
+
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        header { background: #ffffff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 6px 16px rgba(16,24,40,0.06); }
+
+        h1 { color: #111827; margin-bottom: 6px; font-size: 1.6rem; }
+        .subtitle { color: #4b5563; font-size: 0.95rem; }
+
+        .card { background: #fff; border-radius: 8px; padding: 18px; margin-bottom: 18px; box-shadow: 0 6px 18px rgba(16,24,40,0.04); }
+
+        .card h2 { color: #111827; margin-bottom: 14px; font-size: 1.15rem; border-bottom: 1px solid #eef2f7; padding-bottom: 8px; }
+
+        .form-group { margin-bottom: 14px; }
+        label { display: block; margin-bottom: 6px; color: #374151; font-weight: 600; font-size: 0.95rem; }
+
+        input[type="text"], select { width: 100%; padding: 10px 12px; border: 1px solid #e6eef6; border-radius: 6px; font-size: 0.95rem; }
+        input[type="text"]:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 4px 12px rgba(59,130,246,0.08); }
+
+        input[type="file"] { padding: 8px 10px; }
+
+        .button-group { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        button, .btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-secondary { background: #f3f4f6; color: #111827; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-success { background: #16a34a; color: white; }
+        .btn-primary:hover { filter: brightness(1.03); }
+
+        .reports-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+
+        .report-card { background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 6px 18px rgba(16,24,40,0.04); border-left: 4px solid #2563eb; }
+        .report-title { font-weight: 700; color: #0f172a; margin-bottom: 8px; font-size: 0.95rem; }
+        .report-meta { font-size: 0.85rem; color: #6b7280; margin-bottom: 8px; }
+        .report-url { color: #2563eb; font-weight: 600; margin-bottom: 8px; }
+
+        .severity-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .severity-high { background: #fff4f4; color: #b91c1c; }
+        .severity-low { background: #f0fdf4; color: #166534; }
+
+        .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        @media (max-width: 768px) { .two-column { grid-template-columns: 1fr; } .reports-grid { grid-template-columns: 1fr; } }
+    </style>
     </style>
 </head>
 <body>
@@ -275,8 +73,8 @@
                     <h2>🚀 Start New Scan</h2>
                     <form id="scanForm">
                         <div class="form-group">
-                            <label for="target">Target URL</label>
-                            <input type="url" id="target" name="target" placeholder="https://example.com" required />
+                            <label for="target">Target (host or URL)</label>
+                            <input type="text" id="target" name="target" placeholder="example.com or https://example.com" required />
                         </div>
                         <div class="form-group">
                             <label for="mode">Scan Mode</label>
