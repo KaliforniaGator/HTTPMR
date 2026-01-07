@@ -18,9 +18,12 @@
                     <p class="subtitle">HTTP & Web Vulnerability Assessment Tool</p>
                 </div>
                 <div class="user-info">
-                    <button class="btn btn-secondary btn-sm" style="cursor: default;" disabled>
-                        <i class="fas fa-user"></i> {{ username }}
-                    </button>
+                    <div id="settings-status" style="margin-right: 10px;">
+                        <!-- Settings status will be loaded here -->
+                    </div>
+                    <a href="/settings" class="btn btn-secondary btn-sm" style="text-decoration: none;">
+                        <i class="fas fa-user-cog"></i> {{ username }}
+                    </a>
                     <form method="post" action="/logout" style="margin: 0;">
                         <button type="submit" class="btn btn-danger btn-sm">Sign Out</button>
                     </form>
@@ -113,6 +116,65 @@
     <!-- HTTPMR UI JavaScript -->
     <script src="/static/js/ui.js"></script>
     <script>
+        // Load settings status
+        async function loadSettingsStatus() {
+            try {
+                const response = await fetch('/api/settings/status');
+                if (response.ok) {
+                    const status = await response.json();
+                    const statusDiv = document.getElementById('settings-status');
+                    
+                    let statusHtml = '';
+                    
+                    // Real-time scans indicator
+                    if (status.real_time_scans_enabled) {
+                        statusHtml += '<span class="badge badge-success" title="Real-time scans enabled"><i class="fas fa-bolt"></i> Real-time</span> ';
+                    }
+                    
+                    // API keys indicators with rate limit status
+                    if (status.has_nvd_key) {
+                        const nvdStatus = status.rate_limits?.nvd;
+                        const nvdClass = nvdStatus?.available ? 'badge-success' : 
+                                       nvdStatus?.in_cooldown ? 'badge-warning' : 'badge-danger';
+                        const nvdTitle = nvdStatus ? 
+                            `NVD API: ${nvdStatus.requests_last_minute}/${nvdStatus.limit_per_minute} per minute, ${nvdStatus.requests_last_hour}/${nvdStatus.limit_per_hour} per hour` :
+                            'NVD API configured';
+                        statusHtml += `<span class="badge ${nvdClass}" title="${nvdTitle}"><i class="fas fa-shield-alt"></i> NVD</span> `;
+                    }
+                    
+                    if (status.has_exploitdb_key) {
+                        const exploitStatus = status.rate_limits?.exploitdb;
+                        const exploitClass = exploitStatus?.available ? 'badge-success' : 
+                                          exploitStatus?.in_cooldown ? 'badge-warning' : 'badge-danger';
+                        const exploitTitle = exploitStatus ? 
+                            `ExploitDB API: ${exploitStatus.requests_last_minute}/${exploitStatus.limit_per_minute} per minute, ${exploitStatus.requests_last_hour}/${exploitStatus.limit_per_hour} per hour` :
+                            'ExploitDB API configured';
+                        statusHtml += `<span class="badge ${exploitClass}" title="${exploitTitle}"><i class="fas fa-database"></i> ExploitDB</span> `;
+                    }
+                    
+                    if (status.has_vulndb_key) {
+                        const vulnStatus = status.rate_limits?.vulndb;
+                        const vulnClass = vulnStatus?.available ? 'badge-success' : 
+                                       vulnStatus?.in_cooldown ? 'badge-warning' : 'badge-danger';
+                        const vulnTitle = vulnStatus ? 
+                            `VulnDB API: ${vulnStatus.requests_last_minute}/${vulnStatus.limit_per_minute} per minute, ${vulnStatus.requests_last_hour}/${vulnStatus.limit_per_hour} per hour` :
+                            'VulnDB API configured';
+                        statusHtml += `<span class="badge ${vulnClass}" title="${vulnTitle}"><i class="fas fa-exclamation-triangle"></i> VulnDB</span> `;
+                    }
+                    
+                    // Show cooldown warning if any API is in cooldown
+                    const inCooldown = Object.values(status.rate_limits || {}).some(api => api.in_cooldown);
+                    if (inCooldown) {
+                        statusHtml += '<span class="badge badge-warning" title="One or more APIs are in rate limit cooldown"><i class="fas fa-clock"></i> Cooldown</span> ';
+                    }
+                    
+                    statusDiv.innerHTML = statusHtml;
+                }
+            } catch (error) {
+                console.error('Failed to load settings status:', error);
+            }
+        }
+        
         const scanForm = document.getElementById('scanForm');
         const uploadForm = document.getElementById('uploadForm');
 
@@ -215,6 +277,9 @@
                 }
             });
         }
+        
+        // Load settings status when page loads
+        document.addEventListener('DOMContentLoaded', loadSettingsStatus);
     </script>
 </body>
 </html>

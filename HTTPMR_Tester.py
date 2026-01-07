@@ -164,9 +164,52 @@ def verify_headers(report: Dict[str, Any]) -> Dict[str, Any]:
     # Map missing security controls to ATT&CK defensive-evasion/adversary techniques where relevant
     headers = report.get('tests', {}).get('security_headers', {})
     missing = headers.get('missing', [])
+    missing_details = headers.get('missing_details', [])
     score = headers.get('score', 0)
-    mitre_map = ["T1562"] if missing else []  # T1562: Impair Defenses (approximation)
-    return {"check": "Security Headers", "missing": missing, "score": score, "recommendation": "Add missing headers: " + ", ".join(missing) if missing else "All present", "mitre": mitre_map}
+    
+    # Analyze specific new vulnerability types
+    new_vulns = []
+    mitre_map = ["T1562"]  # T1562: Impair Defenses (base)
+    
+    # Check for new vulnerability types in missing_details
+    for detail in missing_details:
+        header_name = detail.get('header', '')
+        message = detail.get('message', '')
+        
+        if header_name == "Server":
+            new_vulns.append("Server header disclosure")
+            mitre_map.append("T1592")  # Gather Victim Host Information
+            
+        elif header_name == "Cookie-Security":
+            new_vulns.append("Missing cookie security attributes")
+            mitre_map.extend(["T1552", "T1566"])  # Unsecured Credentials + Phishing
+            
+        elif header_name == "CSP-Report-URI-Deprecated":
+            new_vulns.append("CSP uses deprecated report-uri")
+            mitre_map.append("T1608")  # Gather Victim Network Information
+            
+        elif header_name == "React-Server-Components-RCE":
+            new_vulns.append("React Server Components RCE risk")
+            mitre_map.extend(["T1190", "T1059"])  # Exploit Public-Facing App + Code Execution
+    
+    # Combine traditional missing headers with new vulnerabilities
+    all_issues = missing + new_vulns
+    
+    recommendation = "Add missing headers: " + ", ".join(missing) if missing else ""
+    if new_vulns:
+        if recommendation:
+            recommendation += "; Address new vulnerabilities: " + ", ".join(new_vulns)
+        else:
+            recommendation = "Address new vulnerabilities: " + ", ".join(new_vulns)
+    
+    return {
+        "check": "Security Headers", 
+        "missing": missing,
+        "new_vulnerabilities": new_vulns,
+        "score": score, 
+        "recommendation": recommendation if recommendation else "All present",
+        "mitre": list(set(mitre_map))  # Remove duplicates
+    }
 
 
 def run_all_checks(report: Dict[str, Any], mode: str = 'safe') -> List[Dict[str, Any]]:

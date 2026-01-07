@@ -442,6 +442,31 @@ def show_security_headers_analysis(report: Dict[str, Any]):
     else:
         print("  All critical headers are present!")
     
+    # Show new vulnerability types if detected
+    missing_details = headers.get('missing_details', [])
+    new_vulns = [d for d in missing_details if d.get('header') not in ['Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options', 'Content-Security-Policy', 'X-XSS-Protection', 'Referrer-Policy', 'Permissions-Policy']]
+    
+    if new_vulns:
+        print_section("NEW VULNERABILITIES DETECTED (2024-2025)")
+        for vuln in new_vulns:
+            header_name = vuln.get('header', '')
+            message = vuln.get('message', '')
+            
+            # Color code by severity
+            if header_name == "React-Server-Components-RCE":
+                vuln_color = Color.RED
+                icon = "🚨"
+            elif header_name in ["Server", "Cookie-Security"]:
+                vuln_color = Color.YELLOW
+                icon = "⚠️"
+            else:
+                vuln_color = Color.MAGENTA
+                icon = "ℹ️"
+            
+            print(f"  {icon} {colorize(header_name.replace('-', ' ').title(), vuln_color)}")
+            print(f"    {Color.DIM}{message}{Color.RESET}")
+            print()
+    
     print_section("WHAT ARE SECURITY HEADERS?")
     print("""Security headers are HTTP response headers that tell web browsers how to
 protect your website and its visitors. They're like security instructions

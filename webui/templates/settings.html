@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTTPMR - Settings</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HTTPMR Design System -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="dashboard-header">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1><i class="fas fa-cog"></i> Settings</h1>
+                    <p class="subtitle">Configure API keys and scanning preferences</p>
+                </div>
+                <div class="user-info">
+                    <div id="settings-status" style="margin-right: 10px;">
+                        <!-- API status will be loaded here -->
+                    </div>
+                    <button id="current-username-pill" class="btn btn-secondary btn-sm" style="cursor: default;" disabled>
+                        <i class="fas fa-user"></i> {{ username }}
+                    </button>
+                    <form method="post" action="/logout" style="margin: 0;">
+                        <button type="submit" class="btn btn-danger btn-sm">Sign Out</button>
+                    </form>
+                </div>
+            </div>
+        </header>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="card-title"><i class="fas fa-cogs"></i> API Configuration</h2>
+                    <a href="/" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+            <form id="settings-form" method="post" action="/settings">
+                <!-- NVD API Key -->
+                <div class="form-group" style="margin-bottom: 2rem;">
+                    <label for="nvd_api_key">
+                        <i class="fas fa-shield-alt"></i> NVD API Key
+                        <span class="form-help">National Vulnerability Database API key for CVE lookups</span>
+                    </label>
+                    <input type="password" id="nvd_api_key" name="nvd_api_key" 
+                           value="{{ settings.nvd_api_key }}" placeholder="Enter your NVD API key" />
+                </div>
+
+                <!-- Exploit DB API Key -->
+                <div class="form-group" style="margin-bottom: 2rem;">
+                    <label for="exploitdb_api_key">
+                        <i class="fas fa-database"></i> Exploit DB API Key
+                        <span class="form-help">Exploit Database API key for exploit information</span>
+                    </label>
+                    <input type="password" id="exploitdb_api_key" name="exploitdb_api_key" 
+                           value="{{ settings.exploitdb_api_key }}" placeholder="Enter your Exploit DB API key" />
+                </div>
+
+                <!-- VulnDB API Key -->
+                <div class="form-group" style="margin-bottom: 2rem;">
+                    <label for="vulndb_api_key">
+                        <i class="fas fa-exclamation-triangle"></i> VulnDB API Key
+                        <span class="form-help">VulnDB API key for vulnerability intelligence</span>
+                    </label>
+                    <input type="password" id="vulndb_api_key" name="vulndb_api_key" 
+                           value="{{ settings.vulndb_api_key }}" placeholder="Enter your VulnDB API key" />
+                </div>
+
+                <!-- Feed Update Settings Card -->
+                <div class="card" style="margin: 2rem 0;">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="fas fa-clock"></i> Feed Update Settings</h3>
+                    </div>
+                    
+                    <!-- Feed Update Interval -->
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label for="feed_update_interval">
+                            <i class="fas fa-sync"></i> Feed Update Interval
+                            <span class="form-help">How often to update vulnerability feeds</span>
+                        </label>
+                        <div class="flex gap-md items-center">
+                            <input type="number" id="feed_update_value" name="feed_update_value" 
+                                   value="{{ settings.feed_update_interval.value }}" min="1" max="1000" 
+                                   class="form-control-sm" style="width: 100px;" />
+                            <select id="feed_update_unit" name="feed_update_unit" class="form-control-sm" style="width: 120px;">
+                                <option value="hours" {% if settings.feed_update_interval.unit == 'hours' %}selected{% endif %}>Hours</option>
+                                <option value="days" {% if settings.feed_update_interval.unit == 'days' %}selected{% endif %}>Days</option>
+                                <option value="weeks" {% if settings.feed_update_interval.unit == 'weeks' %}selected{% endif %}>Weeks</option>
+                                <option value="months" {% if settings.feed_update_interval.unit == 'months' %}selected{% endif %}>Months</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scanning Settings Card -->
+                <div class="card" style="margin: 2rem 0;">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="fas fa-radar"></i> Scanning Settings</h3>
+                    </div>
+                    
+                    <!-- Real-Time Scans Toggle -->
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enable_real_time_scans" name="enable_real_time_scans" 
+                                   {% if settings.enable_real_time_scans %}checked{% endif %} />
+                            <span class="checkmark"></span>
+                            <i class="fas fa-bolt"></i> Enable Real-Time Scans
+                            <span class="form-help">Automatically scan targets when they are detected or changed</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex gap-md" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                    <a href="/" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Account Security Card -->
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="card-title"><i class="fas fa-user-shield"></i> Account Security</h2>
+                </div>
+            </div>
+            <form id="account-form" method="post" action="/settings/account" class="card-body" style="padding: 1.5rem;">
+                <p class="form-help" style="margin-bottom: 1.5rem;">
+                    Update your username and/or password. Leave any field blank to keep it unchanged.
+                </p>
+                <div class="form-group">
+                    <label for="new_username">
+                        <i class="fas fa-id-card"></i> New Username
+                        <span class="form-help">Minimum 3 characters. Leave blank to keep current username.</span>
+                    </label>
+                    <input type="text" id="new_username" name="new_username" placeholder="Enter a new username (optional)" minlength="3" />
+                </div>
+
+                <div class="form-group">
+                    <label for="current_password">
+                        <i class="fas fa-lock"></i> Current Password
+                        <span class="form-help">Required to verify your identity.</span>
+                    </label>
+                    <input type="password" id="current_password" name="current_password" placeholder="Enter current password" required />
+                </div>
+
+                <div class="form-group">
+                    <label for="new_password">
+                        <i class="fas fa-key"></i> New Password
+                        <span class="form-help">Minimum 8 characters. Leave blank to keep current password.</span>
+                    </label>
+                    <input type="password" id="new_password" name="new_password" placeholder="Enter a new password (optional)" minlength="8" />
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password">
+                        <i class="fas fa-keyboard"></i> Confirm New Password
+                        <span class="form-help">Only required if providing a new password.</span>
+                    </label>
+                    <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm new password" minlength="8" />
+                </div>
+
+                <div class="flex gap-md" style="margin-top: 1.5rem;">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Update Account
+                    </button>
+                    <button type="reset" class="btn btn-secondary" style="min-width: 150px;">
+                        <i class="fas fa-undo"></i> Reset Fields
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- API Information Card -->
+        <div id="api-information-card" class="card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-info-circle"></i> API Information</h3>
+            </div>
+            <div class="card-body" style="padding: 1.5rem;">
+                <div style="margin-bottom: 1rem; padding: var(--space-md); background: rgb(59 130 246 / 0.1); border: 1px solid var(--btn-primary); border-radius: var(--radius-md); color: #93c5fd;">
+                    <h4 style="margin-bottom: 1rem; color: var(--text-primary);"><i class="fas fa-lightbulb"></i> Getting API Keys</h4>
+                    <ul style="margin-bottom: 1rem; line-height: 1.6; color: var(--text-secondary);">
+                        <li style="margin-bottom: 0.5rem;"><strong>NVD API Key:</strong> Get your free API key from <a href="https://nvd.nist.gov/developers/request-an-api-key" target="_blank">NIST website</a></li>
+                        <li style="margin-bottom: 0.5rem;"><strong>Exploit DB API Key:</strong> Available through <a href="https://www.exploit-db.com/api" target="_blank">Exploit Database API</a></li>
+                        <li style="margin-bottom: 0.5rem;"><strong>VulnDB API Key:</strong> Sign up at <a href="https://vulndb.cyberriskanalytics.com/" target="_blank">VulnDB</a></li>
+                    </ul>
+                    <p style="margin-bottom: 0; color: var(--text-muted);"><small><em>If no API keys are provided, HTTPMR will use built-in vulnerability databases.</em></small></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HTTPMR UI JavaScript -->
+    <script src="/static/js/ui.js"></script>
+    <script>
+        // Load settings status
+        async function loadSettingsStatus() {
+            try {
+                const response = await fetch('/api/settings/status');
+                if (response.ok) {
+                    const status = await response.json();
+                    const statusDiv = document.getElementById('settings-status');
+                    
+                    let statusHtml = '';
+                    
+                    // Real-time scans indicator
+                    if (status.real_time_scans_enabled) {
+                        statusHtml += '<span class="badge badge-success" title="Real-time scans enabled"><i class="fas fa-bolt"></i> Real-time</span> ';
+                    }
+                    
+                    // API keys indicators with rate limit status
+                    if (status.has_nvd_key) {
+                        const nvdStatus = status.rate_limits?.nvd;
+                        const nvdClass = nvdStatus?.available ? 'badge-success' : 
+                                       nvdStatus?.in_cooldown ? 'badge-warning' : 'badge-danger';
+                        const nvdTitle = nvdStatus ? 
+                            `NVD API: ${nvdStatus.requests_last_minute}/${nvdStatus.limit_per_minute} per minute, ${nvdStatus.requests_last_hour}/${nvdStatus.limit_per_hour} per hour` :
+                            'NVD API configured';
+                        statusHtml += `<span class="badge ${nvdClass}" title="${nvdTitle}"><i class="fas fa-shield-alt"></i> NVD</span> `;
+                    }
+                    
+                    if (status.has_exploitdb_key) {
+                        const exploitStatus = status.rate_limits?.exploitdb;
+                        const exploitClass = exploitStatus?.available ? 'badge-success' : 
+                                          exploitStatus?.in_cooldown ? 'badge-warning' : 'badge-danger';
+                        const exploitTitle = exploitStatus ? 
+                            `ExploitDB API: ${exploitStatus.requests_last_minute}/${exploitStatus.limit_per_minute} per minute, ${exploitStatus.requests_last_hour}/${exploitStatus.limit_per_hour} per hour` :
+                            'ExploitDB API configured';
+                        statusHtml += `<span class="badge ${exploitClass}" title="${exploitTitle}"><i class="fas fa-database"></i> ExploitDB</span> `;
+                    }
+                    
+                    if (status.has_vulndb_key) {
+                        const vulnStatus = status.rate_limits?.vulndb;
+                        const vulnClass = vulnStatus?.available ? 'badge-success' : 
+                                       vulnStatus?.in_cooldown ? 'badge-warning' : 'badge-danger';
+                        const vulnTitle = vulnStatus ? 
+                            `VulnDB API: ${vulnStatus.requests_last_minute}/${vulnStatus.limit_per_minute} per minute, ${vulnStatus.requests_last_hour}/${vulnStatus.limit_per_hour} per hour` :
+                            'VulnDB API configured';
+                        statusHtml += `<span class="badge ${vulnClass}" title="${vulnTitle}"><i class="fas fa-exclamation-triangle"></i> VulnDB</span> `;
+                    }
+                    
+                    // Show cooldown warning if any API is in cooldown
+                    const inCooldown = Object.values(status.rate_limits || {}).some(api => api.in_cooldown);
+                    if (inCooldown) {
+                        statusHtml += '<span class="badge badge-warning" title="One or more APIs are in rate limit cooldown"><i class="fas fa-clock"></i> Cooldown</span> ';
+                    }
+                    
+                    statusDiv.innerHTML = statusHtml;
+                }
+            } catch (error) {
+                console.error('Failed to load settings status:', error);
+            }
+        }
+        
+                // Form submission with AJAX
+                document.getElementById('settings-form').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const form = this;
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    const originalText = submitBtn.innerHTML;
+                    const formData = new FormData(form);
+                    
+                    // Show loading state
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                    submitBtn.disabled = true;
+                    
+                    try {
+                        const response = await fetch('/settings', {
+                            method: 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            body: formData
+                        });
+                        
+                        if (response.ok) {
+                            showSuccessMessage();
+                            loadSettingsStatus(); // Refresh the status indicators
+                        } else {
+                            const error = await response.json();
+                            showErrorMessage(error.error || 'Failed to save settings');
+                        }
+                    } catch (error) {
+                        showErrorMessage('Network error: Failed to save settings');
+                    } finally {
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.disabled = false;
+                    }
+                });
+                
+                function showSuccessMessage(message = 'Settings saved successfully!') {
+                    const successMsg = document.createElement('div');
+                    successMsg.className = 'alert alert-success settings-popup';
+                    successMsg.innerHTML = '<i class="fas fa-check"></i> ' + message;
+                    // Set inline styles as fallback to ensure positioning
+                    successMsg.style.cssText = 'position: fixed !important; top: 30px !important; right: 20px !important; z-index: 10000 !important; margin: 0 !important;';
+                    document.body.appendChild(successMsg);
+                    
+                    // Remove after 3 seconds
+                    setTimeout(() => {
+                        successMsg.remove();
+                    }, 3000);
+                }
+                
+                function showErrorMessage(message) {
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'alert alert-error settings-popup';
+                    errorMsg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + message;
+                    // Set inline styles as fallback to ensure positioning
+                    errorMsg.style.cssText = 'position: fixed !important; top: 30px !important; right: 20px !important; z-index: 10000 !important; margin: 0 !important;';
+                    document.body.appendChild(errorMsg);
+                    
+                    // Remove after 5 seconds
+                    setTimeout(() => {
+                        errorMsg.remove();
+                    }, 5000);
+                }
+
+        // Account form submission
+        const accountForm = document.getElementById('account-form');
+        if (accountForm) {
+            accountForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                const submitBtn = accountForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                const formData = new FormData(accountForm);
+
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+                submitBtn.disabled = true;
+
+                try {
+                    const response = await fetch('/settings/account', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        showSuccessMessage(data.message || 'Account updated successfully!');
+                        const usernamePill = document.getElementById('current-username-pill');
+                        if (data.username && usernamePill) {
+                            usernamePill.innerHTML = '<i class="fas fa-user"></i> ' + data.username;
+                        }
+                        accountForm.reset();
+                    } else {
+                        showErrorMessage(data.error || 'Failed to update account');
+                    }
+                } catch (error) {
+                    showErrorMessage('Network error: Failed to update account');
+                } finally {
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                }
+            });
+        }
+
+        // Password visibility toggle
+        document.querySelectorAll('input[type="password"]').forEach(input => {
+            const formGroup = input.closest('.form-group');
+            const container = document.createElement('div');
+            container.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+            
+            // Wrap the input in the new container
+            input.parentNode.insertBefore(container, input);
+            container.appendChild(input);
+            
+            // Create the toggle button
+            const toggleBtn = document.createElement('button');
+            toggleBtn.type = 'button';
+            toggleBtn.className = 'btn btn-sm btn-secondary';
+            toggleBtn.style.cssText = 'flex-shrink: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;';
+            toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+            
+            toggleBtn.addEventListener('click', () => {
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                } else {
+                    input.type = 'password';
+                    toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+                }
+            });
+            
+            container.appendChild(toggleBtn);
+        });
+
+        // Feed update interval validation
+        const feedValueInput = document.getElementById('feed_update_value');
+        const feedUnitSelect = document.getElementById('feed_update_unit');
+        
+        function validateFeedInterval() {
+            const value = parseInt(feedValueInput.value);
+            const unit = feedUnitSelect.value;
+            
+            if (value < 1) {
+                feedValueInput.setCustomValidity('Value must be at least 1');
+                return false;
+            }
+            
+            // Set reasonable maximums based on unit
+            const maxValues = {
+                'hours': 168,  // 1 week
+                'days': 30,    // 1 month  
+                'weeks': 12,   // 3 months
+                'months': 12   // 1 year
+            };
+            
+            if (value > maxValues[unit]) {
+                feedValueInput.setCustomValidity(`Maximum ${maxValues[unit]} ${unit}`);
+                return false;
+            }
+            
+            feedValueInput.setCustomValidity('');
+            return true;
+        }
+        
+        feedValueInput.addEventListener('input', validateFeedInterval);
+        feedUnitSelect.addEventListener('change', validateFeedInterval);
+        
+        // Load settings status when page loads
+        document.addEventListener('DOMContentLoaded', loadSettingsStatus);
+        
+    </script>
+</body>
+</html>

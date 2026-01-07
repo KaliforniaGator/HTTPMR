@@ -14,18 +14,29 @@ import sqlite3
 import bcrypt
 import secrets
 import logging
+import requests
 from datetime import datetime
+try:
+    import nvdlib
+    NVD_AVAILABLE = True
+except ImportError:
+    NVD_AVAILABLE = False
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 REPORT_DIR = os.path.join(BASE_DIR, "reports")
 DB_PATH = os.path.join(BASE_DIR, ".secure", "httpmr.db")
 CVE_FIXES_PATH = os.path.join(BASE_DIR, ".secure", "cves-fixes.json")
 HEADER_FIXES_PATH = os.path.join(BASE_DIR, ".secure", "header-fixes.json")
+SETTINGS_PATH = os.path.join(BASE_DIR, ".secure", "settings.config")
 SESSION_TIMEOUT = 24 * 60 * 60  # 24 hours
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Check NVD availability after logger is set up
+if not NVD_AVAILABLE:
+    logger.warning("NVDLib not available - NVD API features disabled")
 
 # In-memory job store: job_id -> {history: [lines], queue: asyncio.Queue(), status, outpath, target}
 JOBS = {}
@@ -385,6 +396,137 @@ def _get_header_fix(header_name: str):
         return None
     fixes = _load_header_fixes()
     return fixes.get(header_name)
+
+
+def _load_settings():
+    """Load settings from secure storage."""
+    try:
+        if not os.path.exists(SETTINGS_PATH):
+            logger.warning("Settings file not found at %s", SETTINGS_PATH)
+            return {
+                "nvd_api_key": "",
+                "exploitdb_api_key": "",
+                "vulndb_api_key": "",
+                "feed_update_interval": {"value": 1, "unit": "hours"},
+                "enable_real_time_scans": False,
+                "last_feed_update": None
+            }
+        with open(SETTINGS_PATH, 'r') as f:
+            settings = json.load(f)
+            logger.info("Loaded settings from %s", SETTINGS_PATH)
+            return settings
+    except json.JSONDecodeError as e:
+        logger.error("Invalid JSON in settings file: %s", e)
+        return {}
+    except Exception as e:
+        logger.error("Failed to load settings: %s", e)
+        return {}
+
+
+def _save_settings(settings: dict):
+    """Save settings to secure storage."""
+    try:
+        with open(SETTINGS_PATH, 'w') as f:
+            json.dump(settings, f, indent=2)
+        logger.info("Settings saved to %s", SETTINGS_PATH)
+        return True
+    except Exception as e:
+        logger.error("Failed to save settings: %s", e)
+        return False
+
+
+def _lookup_cve_with_nvd(cve_id: str):
+    """Lookup CVE details using NVD API if key is available."""
+    if not NVD_AVAILABLE:
+        return None
+        
+    settings = _load_settings()
+    api_key = settings.get('nvd_api_key', '')
+    
+    if not api_key:
+        return None
+    
+    try:
+        # Use NVDLib to fetch CVE details
+        cve = nvdlib.getCVE(cve_id, key=api_key)
+        if cve:
+            return {
+                'id': cve.id,
+                'description': cve.description[0].value if cve.description else '',
+                'severity': cve.v31severity if hasattr(cve, 'v31severity') else cve.v2severity,
+                'score': cve.v31score if hasattr(cve, 'v31score') else cve.v2score,
+                'published': cve.publishedDate,
+                'modified': cve.lastModifiedDate,
+                'references': [ref.url for ref in cve.ref] if cve.ref else []
+            }
+    except Exception as e:
+        logger.error(f"Failed to lookup CVE {cve_id} via NVD API: {str(e)}")
+    
+    return None
+
+
+def _is_real_time_scans_enabled():
+    """Check if real-time scans are enabled in settings."""
+    settings = _load_settings()
+    return settings.get('enable_real_time_scans', False)
+
+
+def _lookup_exploitdb(cve_id: str):
+    """Lookup exploit information from ExploitDB API if key is available."""
+    settings = _load_settings()
+    api_key = settings.get('exploitdb_api_key', '')
+    
+    if not api_key:
+        return None
+    
+    try:
+        # ExploitDB API integration
+        url = f"https://www.exploit-db.com/api/v1/exploits?cve={cve_id}"
+        headers = {'Authorization': f'Bearer {api_key}'}
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('results') and len(data['results']) > 0:
+                return {
+                    'exploits': data['results'],
+                    'count': len(data['results']),
+                    'source': 'ExploitDB'
+                }
+    except Exception as e:
+        logger.error(f"Failed to lookup ExploitDB for {cve_id}: {str(e)}")
+    
+    return None
+
+
+def _lookup_vulndb(cve_id: str):
+    """Lookup vulnerability details from VulnDB API if key is available."""
+    settings = _load_settings()
+    api_key = settings.get('vulndb_api_key', '')
+    
+    if not api_key:
+        return None
+    
+    try:
+        # VulnDB API integration (example implementation)
+        url = f"https://vulndb.cyberriskanalytics.com/api/v1/vulnerabilities/{cve_id}"
+        headers = {'Authorization': f'Bearer {api_key}'}
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'id': data.get('id'),
+                'title': data.get('title'),
+                'description': data.get('description'),
+                'severity': data.get('severity'),
+                'cvss_score': data.get('cvss_score'),
+                'source': 'VulnDB'
+            }
+    except Exception as e:
+        logger.error(f"Failed to lookup VulnDB for {cve_id}: {str(e)}")
+    
+    return None
 
 
 def _normalize_report(path):
@@ -752,7 +894,21 @@ async def view_report(request: Request, name: str):
     for cve in tests.get('cves', []) or []:
         cve_id = cve.get('cve') or cve.get('id')
         if cve_id:
-            cve_fix_map[cve_id] = bool(_get_cve_fix(cve_id))
+            # Check for local fix first
+            has_local_fix = bool(_get_cve_fix(cve_id))
+            
+            # Try to get data from all available APIs
+            nvd_data = _lookup_cve_with_nvd(cve_id)
+            exploitdb_data = _lookup_exploitdb(cve_id)
+            vulndb_data = _lookup_vulndb(cve_id)
+            
+            cve_fix_map[cve_id] = {
+                'has_local_fix': has_local_fix,
+                'nvd_data': nvd_data,
+                'exploitdb_data': exploitdb_data,
+                'vulndb_data': vulndb_data,
+                'has_external_data': bool(nvd_data or exploitdb_data or vulndb_data)
+            }
 
     security_headers = tests.get('security_headers') or {}
     header_fix_details = []
@@ -937,6 +1093,155 @@ async def cve_fix_page(request: Request, cve_id: str):
             "username": user["username"],
         },
     )
+
+
+@app.get('/settings', response_class=HTMLResponse)
+async def settings_page(request: Request):
+    user = await _get_user(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+    
+    settings = _load_settings()
+    context = {
+        "request": request,
+        "username": user["username"],
+        "settings": settings,
+    }
+    return templates.TemplateResponse('settings.html', context)
+
+
+@app.post('/settings')
+async def save_settings(request: Request):
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    
+    form = await request.form()
+    settings = _load_settings()
+    
+    # Update settings with form data
+    settings["nvd_api_key"] = form.get('nvd_api_key', '')
+    settings["exploitdb_api_key"] = form.get('exploitdb_api_key', '')
+    settings["vulndb_api_key"] = form.get('vulndb_api_key', '')
+    
+    # Parse feed update interval
+    interval_value = int(form.get('feed_update_value', 1))
+    interval_unit = form.get('feed_update_unit', 'hours')
+    settings["feed_update_interval"] = {
+        "value": interval_value,
+        "unit": interval_unit
+    }
+    
+    # Parse real-time scans toggle
+    settings["enable_real_time_scans"] = form.get('enable_real_time_scans') == 'on'
+    
+    if _save_settings(settings):
+        # Check if this is an AJAX request by checking the X-Requested-With header
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
+        if is_ajax:
+            return JSONResponse({"success": True, "message": "Settings saved successfully"})
+        else:
+            # Traditional form submission - redirect as before
+            return RedirectResponse(url='/settings?saved=true', status_code=303)
+    else:
+        return JSONResponse({"error": "Failed to save settings"}, status_code=500)
+
+
+@app.post('/settings/account')
+async def update_account_credentials(request: Request):
+    """Allow authenticated users to update their username and/or password."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    form = await request.form()
+    current_password = (form.get('current_password') or '').strip()
+    new_username = (form.get('new_username') or '').strip()
+    new_password = form.get('new_password') or ''
+    confirm_password = form.get('confirm_password') or ''
+
+    if not current_password:
+        return JSONResponse({"error": "Current password is required"}, status_code=400)
+
+    if not new_username and not new_password:
+        return JSONResponse({"error": "Provide a new username or password to update"}, status_code=400)
+
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('SELECT password_hash FROM users WHERE id = ?', (user["user_id"],))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return JSONResponse({"error": "User not found"}, status_code=404)
+
+        stored_hash = row[0]
+        if not _verify_password(current_password, stored_hash):
+            conn.close()
+            return JSONResponse({"error": "Current password is incorrect"}, status_code=400)
+
+        updates = []
+        params: list[str] = []
+
+        if new_username:
+            if len(new_username) < 3:
+                conn.close()
+                return JSONResponse({"error": "Username must be at least 3 characters"}, status_code=400)
+            updates.append("username = ?")
+            params.append(new_username)
+
+        if new_password:
+            if len(new_password) < 8:
+                conn.close()
+                return JSONResponse({"error": "Password must be at least 8 characters"}, status_code=400)
+            if new_password != confirm_password:
+                conn.close()
+                return JSONResponse({"error": "New passwords do not match"}, status_code=400)
+            new_hash = _hash_password(new_password)
+            updates.append("password_hash = ?")
+            params.append(new_hash)
+
+        if updates:
+            params.append(user["user_id"])
+            try:
+                cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+                conn.commit()
+            except sqlite3.IntegrityError:
+                conn.close()
+                return JSONResponse({"error": "Username already exists"}, status_code=400)
+
+        conn.close()
+    except Exception as exc:
+        logger.error("Failed to update account credentials: %s", exc)
+        return JSONResponse({"error": "Failed to update account"}, status_code=500)
+
+    return JSONResponse({"success": True, "message": "Account updated successfully"})
+
+
+@app.get('/api/settings/status')
+async def get_settings_status(request: Request):
+    """API endpoint to get current settings status."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    
+    settings = _load_settings()
+    
+    # Get rate limit status
+    try:
+        from settings_integration import get_rate_limit_status
+        rate_limit_status = get_rate_limit_status()
+    except ImportError:
+        rate_limit_status = {}
+    
+    return JSONResponse({
+        "real_time_scans_enabled": settings.get('enable_real_time_scans', False),
+        "has_nvd_key": bool(settings.get('nvd_api_key')),
+        "has_exploitdb_key": bool(settings.get('exploitdb_api_key')),
+        "has_vulndb_key": bool(settings.get('vulndb_api_key')),
+        "feed_update_interval": settings.get('feed_update_interval', {'value': 1, 'unit': 'hours'}),
+        "rate_limits": rate_limit_status
+    })
 
 
 @app.get('/header_fix/{header_name}', response_class=HTMLResponse)

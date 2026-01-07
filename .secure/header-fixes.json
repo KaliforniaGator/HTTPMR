@@ -194,5 +194,111 @@
     "references": [
       {"label": "MDN Referrer Policy", "url": "https://developer.mozilla.org/docs/Web/HTTP/Headers/Referrer-Policy"}
     ]
+  },
+  "Server": {
+    "title": "Server Header Disclosure",
+    "severity": "LOW",
+    "summary": "Server response header exposes software version and configuration details that aid attackers.",
+    "why_it_matters": "Revealing exact server versions (Apache/2.4.52, nginx/1.20.1) allows attackers to search for known vulnerabilities and reduces reconnaissance effort.",
+    "fix_steps": [
+      "Configure web server to suppress or minimize the Server header.",
+      "Use ServerTokens Prod in Apache or server_tokens off in nginx.",
+      "Consider using reverse proxies/WAFs to rewrite or strip server headers."
+    ],
+    "server_snippets": {
+      "nginx": "server_tokens off;",
+      "apache": "ServerTokens Prod\nServerSignature Off"
+    },
+    "code_snippets": {
+      "php": "<?php\nheader_remove('Server');\n?>",
+      "javascript": "// Express example with helmet\nconst helmet = require('helmet');\napp.use(helmet.hidePoweredBy());\napp.use((req, res, next) => {\n  res.removeHeader('Server');\n  next();\n});"
+    },
+    "verification": [
+      "Run curl -I https://domain and confirm Server header is absent or shows minimal info.",
+      "Use securityheaders.com to verify server header disclosure is resolved."
+    ],
+    "references": [
+      {"label": "Claranet 2024 Research", "url": "https://www.claranet.com/us/blog/2025-01-07-claranet%E2%80%99s-top-10-web-application-vulnerabilities-found-2024"}
+    ]
+  },
+  "Cookie-Security": {
+    "title": "Missing Cookie Security Attributes",
+    "severity": "MEDIUM",
+    "summary": "Authentication cookies lack Secure, HttpOnly, or SameSite attributes, increasing XSS/CSRF risk.",
+    "why_it_matters": "Without Secure, cookies leak over HTTP; without HttpOnly, JavaScript can steal them; without SameSite, CSRF attacks succeed.",
+    "fix_steps": [
+      "Set Secure flag on all cookies for HTTPS sites.",
+      "Enable HttpOnly to prevent client-side script access.",
+      "Configure SameSite=Strict or Lax based on cross-origin needs."
+    ],
+    "server_snippets": {
+      "nginx": "proxy_cookie_path / \"/; Secure; HttpOnly; SameSite=Strict\";",
+      "apache": "Header edit Set-Cookie \"(?i)^(.*; )?secure$\" \"$1Secure\""
+    },
+    "code_snippets": {
+      "php": "<?php\nsession_set_cookie_params([\n  'lifetime' => 0,\n  'path' => '/',\n  'domain' => $_SERVER['HTTP_HOST'],\n  'secure' => true,\n  'httponly' => true,\n  'samesite' => 'Strict'\n]);\n?>",
+      "javascript": "// Express with cookie-parser\napp.use(session({\n  cookie: {\n    secure: true,\n    httpOnly: true,\n    sameSite: 'strict'\n  }\n}));",
+      "react": "// Client-side cannot set security attributes—must be done server-side\n// Use HttpOnly cookies and avoid localStorage for auth tokens"
+    },
+    "verification": [
+      "Inspect cookies in browser DevTools > Application > Cookies and confirm Secure/HttpOnly/SameSite flags.",
+      "Use OWASP ZAP or Burp to verify cookie attributes in responses."
+    ],
+    "references": [
+      {"label": "Claranet Cookie Attributes 2024", "url": "https://www.claranet.com/us/blog/2025-01-07-claranet%E2%80%99s-top-10-web-application-vulnerabilities-found-2024"}
+    ]
+  },
+  "CSP-Report-URI-Deprecated": {
+    "title": "CSP Uses Deprecated report-uri Directive",
+    "severity": "LOW",
+    "summary": "Content Security Policy uses the deprecated report-uri instead of the modern report-to mechanism.",
+    "why_it_matters": "Modern browsers may stop supporting report-uri; violation reports could be lost, reducing security monitoring.",
+    "fix_steps": [
+      "Replace report-uri with report-to directive in CSP headers.",
+      "Add Reporting-Endpoints header to define endpoint groups.",
+      "Keep report-uri temporarily for backward compatibility if needed."
+    ],
+    "server_snippets": {
+      "nginx": "add_header Reporting-Endpoints \"default-endpoint=\"https://reports.example.com/default\"\";\nadd_header Content-Security-Policy \"default-src 'self'; report-to default-endpoint\";",
+      "apache": "Header set Reporting-Endpoints \"default-endpoint=\"https://reports.example.com/default\"\"\nHeader set Content-Security-Policy \"default-src 'self'; report-to default-endpoint\""
+    },
+    "code_snippets": {
+      "javascript": "// Express example\napp.use((req, res, next) => {\n  res.setHeader('Reporting-Endpoints', 'default-endpoint=\"https://reports.example.com/default\"');\n  res.setHeader('Content-Security-Policy', 'default-src \"self\"; report-to default-endpoint');\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function ModernCspReports() {\n  return (\n    <Helmet>\n      <meta httpEquiv=\"Reporting-Endpoints\" content=\"default-endpoint=&quot;https://reports.example.com/default&quot;\" />\n      <meta httpEquiv=\"Content-Security-Policy\" content=\"default-src 'self'; report-to default-endpoint\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Check browser DevTools Console for CSP warnings about report-uri deprecation.",
+      "Test violation reports by injecting a script and confirming delivery to the report-to endpoint."
+    ],
+    "references": [
+      {"label": "MDN report-uri Deprecated", "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/report-uri"}
+    ]
+  },
+  "React-Server-Components-RCE": {
+    "title": "React Server Components Remote Code Execution (CVE-2025-55182)",
+    "severity": "CRITICAL",
+    "summary": "Unauthenticated RCE in React Server Functions via malicious HTTP request deserialization.",
+    "why_it_matters": "Attackers can execute arbitrary code on the server without authentication, leading to full system compromise.",
+    "fix_steps": [
+      "Update React to latest patched versions immediately (see React blog for version matrix).",
+      "Update Next.js, React Router, Waku, and other affected frameworks to patched releases.",
+      "If using canary releases, downgrade to latest stable patched versions.",
+      "Audit for any exposed Server Function endpoints and implement additional authentication."
+    ],
+    "server_snippets": {
+      "npm": "# Update to patched versions\nnpm install react@latest react-dom@latest\nnpm install next@15.4.10 # or appropriate version for your release line\nnpm install react-server-dom-webpack@latest"
+    },
+    "code_snippets": {
+      "javascript": "// After updating, verify no unauthenticated Server Functions\n// Add authentication middleware to all Server Function routes\napp.use('/api/_rsc', (req, res, next) => {\n  if (!req.session?.userId) {\n    return res.status(401).end();\n  }\n  next();\n});"
+    },
+    "verification": [
+      "Run npm audit to confirm no vulnerable React packages remain.",
+      "Test with the public proof-of-concept to ensure the RCE is patched.",
+      "Review access logs for suspicious /_rsc or Server Function requests."
+    ],
+    "references": [
+      {"label": "React Critical RCE Advisory", "url": "https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components"},
+      {"label": "CVE-2025-55182", "url": "https://www.cve.org/CVERecord?id=CVE-2025-55182"}
+    ]
   }
 }

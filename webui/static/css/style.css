@@ -221,6 +221,25 @@ a:hover {
   justify-content: space-between;
 }
 
+/* Ensure Back button in card header is properly positioned */
+.card-header .btn {
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+  align-self: center !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Fix card header flex alignment */
+.card-header > div {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
 .card-title {
   font-size: 1.25rem;
   font-weight: 700;
@@ -228,6 +247,30 @@ a:hover {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.card-body {
+  padding: var(--space-lg);
+}
+
+/* Ensure API Information card is always visible */
+#api-information-card {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  animation: none !important;
+  transform: none !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+#api-information-card .card-header,
+#api-information-card .card-body {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  animation: none !important;
+  transform: none !important;
 }
 
 .sort-form {
@@ -609,6 +652,11 @@ textarea::placeholder {
   color: white;
 }
 
+.badge-info {
+  background: var(--btn-info);
+  color: white;
+}
+
 .badge-secondary {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -885,6 +933,52 @@ textarea::placeholder {
   to { 
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Settings popup styling */
+.settings-popup {
+  position: fixed !important;
+  top: 30px !important;
+  right: 20px !important;
+  z-index: 10000 !important;
+  min-width: 300px !important;
+  max-width: 400px !important;
+  padding: 16px 20px !important;
+  margin: 0 !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  animation: slideInRight 0.3s ease-out !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+.settings-popup.alert-success {
+  background: rgba(34, 197, 94, 0.9) !important;
+  border-color: rgba(34, 197, 94, 1) !important;
+  color: white !important;
+  margin-bottom: 0 !important;
+}
+
+.settings-popup.alert-error {
+  background: rgba(239, 68, 68, 0.9) !important;
+  border-color: rgba(239, 68, 68, 1) !important;
+  color: white !important;
+  margin-bottom: 0 !important;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
 

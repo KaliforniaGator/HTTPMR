@@ -16,6 +16,15 @@ try:
 except Exception:
     sarif_exporter = None
 
+# Settings and API integration
+try:
+    from settings_integration import enhance_cve_with_external_apis, is_real_time_scans_enabled
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+    def enhance_cve_with_external_apis(cve_data): return cve_data
+    def is_real_time_scans_enabled(): return False
+
 # Color codes for terminal output
 class Color:
     RESET = '\033[0m'
@@ -486,7 +495,9 @@ def analyze_security_headers(url, verbose=False):
     other_headers = {
         "Referrer-Policy": 5,
         "Permissions-Policy": 10,
-        "X-UA-Compatible": 5
+        "X-UA-Compatible": 5,
+        "Server": 3,  # Server header disclosure check
+        "Reporting-Endpoints": 2,  # Modern CSP reporting
     }
     
     try:
@@ -521,6 +532,77 @@ def analyze_security_headers(url, verbose=False):
             else:
                 if verbose:
                     print(f"{Color.YELLOW}[~] {header_name}: Optional (not present){Color.RESET}")
+        
+        # Advanced header analysis for new vulnerabilities
+        if verbose:
+            print(f"\n{Color.CYAN}[ADVANCED] Checking for new vulnerabilities...{Color.RESET}")
+        
+        # Check Server header disclosure
+        if "Server" in headers:
+            server_value = headers["Server"]
+            if any(version in server_value.lower() for version in ["apache/", "nginx/", "iis/", "cloudflare"]):
+                if verbose:
+                    print(f"{Color.YELLOW}[!] Server header disclosure detected: {server_value}{Color.RESET}")
+                headers_analysis['missing_details'].append({
+                    "header": "Server",
+                    "message": "Server header reveals software version information"
+                })
+        
+        # Check CSP for deprecated report-uri
+        if "Content-Security-Policy" in headers:
+            csp_value = headers["Content-Security-Policy"]
+            if "report-uri" in csp_value:
+                if verbose:
+                    print(f"{Color.YELLOW}[!] CSP uses deprecated report-uri directive{Color.RESET}")
+                headers_analysis['missing_details'].append({
+                    "header": "CSP-Report-URI-Deprecated",
+                    "message": "CSP uses deprecated report-uri instead of report-to"
+                })
+        
+        # Check for cookie security issues (need to make a request to get Set-Cookie headers)
+        try:
+            resp_get = requests.get(url, timeout=5, allow_redirects=True)
+            if 'Set-Cookie' in resp_get.headers:
+                cookies = resp_get.headers['Set-Cookie']
+                missing_attrs = []
+                if 'secure' not in cookies.lower():
+                    missing_attrs.append('Secure')
+                if 'httponly' not in cookies.lower():
+                    missing_attrs.append('HttpOnly')
+                if 'samesite' not in cookies.lower():
+                    missing_attrs.append('SameSite')
+                
+                if missing_attrs:
+                    if verbose:
+                        print(f"{Color.YELLOW}[!] Cookie missing attributes: {', '.join(missing_attrs)}{Color.RESET}")
+                    headers_analysis['missing_details'].append({
+                        "header": "Cookie-Security",
+                        "message": f"Authentication cookies missing: {', '.join(missing_attrs)}"
+                    })
+        except Exception as e:
+            if verbose:
+                print(f"{Color.DIM}[~] Could not analyze cookies: {str(e)}{Color.RESET}")
+        
+        # Check for React Server Components (indicators in response headers or HTML)
+        react_indicators = []
+        if "x-react-ssr" in headers or "react-server" in str(headers).lower():
+            react_indicators.append("React Server headers detected")
+        
+        try:
+            resp_html = requests.get(url, timeout=5, allow_redirects=True)
+            if "react-server" in resp_html.text.lower() or "_rsc" in resp_html.text:
+                react_indicators.append("React Server Components content detected")
+        except Exception as e:
+            if verbose:
+                print(f"{Color.DIM}[~] Could not analyze React content: {str(e)}{Color.RESET}")
+        
+        if react_indicators:
+            if verbose:
+                print(f"{Color.RED}[!] React Server Components detected - potential CVE-2025-55182 risk{Color.RESET}")
+            headers_analysis['missing_details'].append({
+                "header": "React-Server-Components-RCE",
+                "message": "React Server Components detected - update to patched versions (CVE-2025-55182)"
+            })
         
         if verbose:
             print(f"\n{Color.BOLD}Security Score: {headers_analysis['score']}/{headers_analysis['max_score']}{Color.RESET}")
@@ -655,84 +737,102 @@ def test_wordpress_cves(url, verbose=False):
     
     # CVE-2025-0001 - WordPress Core SQL Injection (2025)
     try:
-        payload = f"{url}/wp-admin/admin-ajax.php?action=heartbeat"
-        resp = requests.post(payload, timeout=5)
-        if resp.status_code == 200:
+        # Test for potential SQL injection in WordPress core
+        test_url = url + "/wp-admin/admin-ajax.php?action=sample_test"
+        resp = requests.get(test_url, timeout=10)
+        if "mysql" in resp.text.lower() or "sql" in resp.text.lower():
+            cve_results.append({"cve": "CVE-2025-0001", "vulnerable": True, "description": "WordPress Heartbeat API - Potential SQL injection detected"})
+        else:
             cve_results.append({"cve": "CVE-2025-0001", "vulnerable": False, "description": "WordPress Heartbeat API - Check for improper input validation"})
-    except Exception as e:
-        pass
-    
+    except Exception:
+        cve_results.append({"cve": "CVE-2025-0001", "vulnerable": False, "description": "WordPress Heartbeat API - Check for improper input validation"})
+
     # CVE-2024-28133 - WordPress Plugin Directory Traversal
     try:
-        payload = f"{url}/wp-json/oembed/1.0/proxy?url=file:///etc/passwd"
-        resp = requests.get(payload, timeout=5)
-        if resp.status_code == 200 and ("root:" in resp.text or "nobody:" in resp.text):
+        test_url = url + "/wp-json/oembed/1.0/proxy?url=../../../wp-config.php"
+        resp = requests.get(test_url, timeout=10)
+        if resp.status_code == 200 and ("DB_PASSWORD" in resp.text or "DB_HOST" in resp.text):
             cve_results.append({"cve": "CVE-2024-28133", "vulnerable": True, "description": "Directory Traversal via oEmbed proxy"})
         else:
             cve_results.append({"cve": "CVE-2024-28133", "vulnerable": False, "description": "Directory Traversal via oEmbed proxy"})
     except Exception as e:
         cve_results.append({"cve": "CVE-2024-28133", "vulnerable": False, "error": str(e)})
-    
+
     # CVE-2024-25157 - WordPress Unauthenticated Options Update
     try:
-        payload = f"{url}/wp-json/wp/v2/users"
-        resp = requests.get(payload, timeout=5)
-        if resp.status_code == 200:
-            try:
-                data = resp.json()
-                if isinstance(data, list) and len(data) > 0:
-                    cve_results.append({"cve": "CVE-2024-25157", "vulnerable": True, "description": "Unauthenticated user enumeration via REST API"})
-                else:
-                    cve_results.append({"cve": "CVE-2024-25157", "vulnerable": False, "description": "REST API user access restricted"})
-            except:
-                pass
+        test_url = url + "/wp-json/wp/v2/users"
+        resp = requests.get(test_url, timeout=10)
+        if resp.status_code == 200 and "slug" in resp.text:
+            cve_results.append({"cve": "CVE-2024-25157", "vulnerable": True, "description": "Unauthenticated user enumeration via REST API"})
+        else:
+            cve_results.append({"cve": "CVE-2024-25157", "vulnerable": False, "description": "REST API user access restricted"})
     except Exception as e:
         cve_results.append({"cve": "CVE-2024-25157", "vulnerable": False, "error": str(e)})
-    
+
     # CVE-2021-24499 - Plugin Install/Activate CSRF
     try:
-        payload = f"{url}/wp-admin/plugin-install.php?tab=featured"
-        resp = requests.get(payload, timeout=5)
-        if resp.status_code == 200:
+        test_url = url + "/wp-admin/plugin-install.php"
+        resp = requests.get(test_url, timeout=10)
+        if resp.status_code != 302:  # If not redirecting to login
             cve_results.append({"cve": "CVE-2021-24499", "vulnerable": True, "description": "Plugin install page accessible without auth (CSRF risk)"})
-        elif resp.status_code == 302:
+        else:
             cve_results.append({"cve": "CVE-2021-24499", "vulnerable": False, "description": "Plugin install redirects (likely protected)"})
     except Exception as e:
         cve_results.append({"cve": "CVE-2021-24499", "vulnerable": False, "error": str(e)})
-    
+
     # CVE-2024-21888 - Stored XSS in Block Theme
     try:
-        payload = f"{url}/wp-json/wp/v2/pages"
-        resp = requests.get(payload, timeout=5)
-        if resp.status_code == 200:
-            if "<script>" in resp.text or "onclick=" in resp.text:
-                cve_results.append({"cve": "CVE-2024-21888", "vulnerable": True, "description": "Potential XSS in page content (unescaped scripts found)"})
-            else:
-                cve_results.append({"cve": "CVE-2024-21888", "vulnerable": False, "description": "Page content appears properly escaped"})
+        test_url = url + "/?p=1"  # Test a sample page
+        resp = requests.get(test_url, timeout=10)
+        if "<script>" in resp.text and "alert" in resp.text:
+            cve_results.append({"cve": "CVE-2024-21888", "vulnerable": True, "description": "Potential XSS in page content (unescaped scripts found)"})
+        else:
+            cve_results.append({"cve": "CVE-2024-21888", "vulnerable": False, "description": "Page content appears properly escaped"})
     except Exception as e:
         cve_results.append({"cve": "CVE-2024-21888", "vulnerable": False, "error": str(e)})
-    
+
     # XML-RPC Enabled (often exploited)
     try:
-        payload = f"{url}/xmlrpc.php"
-        resp = requests.get(payload, timeout=5)
-        if resp.status_code == 200 and ("XML-RPC server" in resp.text or "<?xml" in resp.text):
+        test_url = url + "/xmlrpc.php"
+        resp = requests.get(test_url, timeout=10)
+        if "XML-RPC server accepts POST requests only" in resp.text:
             cve_results.append({"cve": "XML-RPC-ENABLED", "vulnerable": True, "description": "XML-RPC enabled (brute force and amplification attacks possible)"})
         else:
             cve_results.append({"cve": "XML-RPC-ENABLED", "vulnerable": False, "description": "XML-RPC not detected or disabled"})
     except Exception as e:
         cve_results.append({"cve": "XML-RPC-ENABLED", "vulnerable": False, "error": str(e)})
-    
+
     # WordPress Version Detection for known vulnerabilities
     try:
-        resp = requests.get(url, timeout=5)
-        version_match = re.search(r'WordPress ([\d.]+)', resp.text)
+        test_url = url + "/?feed=rss2"
+        resp = requests.get(test_url, timeout=10)
+        version_match = re.search(r'<generator>https://wordpress.org/\?v=([0-9.]+)</generator>', resp.text)
         if version_match:
             version = version_match.group(1)
             cve_results.append({"cve": "VERSION-DETECTION", "vulnerable": "detected", "version": version, "description": f"WordPress version {version} detected"})
-    except Exception as e:
+    except Exception:
         pass
-    
+
+    # Enhance CVE results with external API data
+    if SETTINGS_AVAILABLE:
+        enhanced_results = []
+        for cve_result in cve_results:
+            enhanced = enhance_cve_with_external_apis(cve_result)
+            enhanced_results.append(enhanced)
+            
+            # Show external API data in verbose mode
+            if verbose and enhanced.get('external_data', {}).get('has_external_data'):
+                external = enhanced['external_data']
+                print(f"  {Color.CYAN}[API DATA] Enhanced {cve_result.get('cve')} with external sources:{Color.RESET}")
+                if external.get('nvd'):
+                    print(f"    NVD: Score {external['nvd'].get('score', 'N/A')}, Severity {external['nvd'].get('severity', 'N/A')}")
+                if external.get('exploitdb'):
+                    print(f"    ExploitDB: {external['exploitdb']['count']} exploits found")
+                if external.get('vulndb'):
+                    print(f"    VulnDB: {external['vulndb'].get('severity', 'N/A')} severity")
+        
+        cve_results = enhanced_results
+
     return cve_results
 
 def summarize_response(resp, elapsed, payload_params, verbose=False, show_full=False, wordpress_data=None):

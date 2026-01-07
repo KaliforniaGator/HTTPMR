@@ -98,6 +98,85 @@
                                 </div>
                             </div>
                             <div class="vulnerability-desc" style="color: var(--text-secondary);">{{ cve.description or cve.summary or cve.title or 'No description' }}</div>
+                            
+                            {% set external = cve.external_data %}
+                            {% if external and external.has_external_data %}
+                                <div class="external-api-section" style="margin-top: var(--space-md);">
+                                    <h4 style="margin-bottom: var(--space-sm); color: var(--text-primary);">
+                                        <i class="fas fa-database"></i> API Intelligence
+                                    </h4>
+                                    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-md);">
+                                        {% if external.nvd %}
+                                            <div class="card" style="background: var(--bg-secondary); border-left: 3px solid var(--btn-primary);">
+                                                <div class="flex items-center gap-sm" style="margin-bottom: var(--space-sm);">
+                                                    <i class="fas fa-shield-alt"></i>
+                                                    <strong>NVD</strong>
+                                                </div>
+                                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                                    {% if external.nvd.severity %}
+                                                        <span style="font-weight: 600;">Severity:</span> {{ external.nvd.severity }}
+                                                    {% endif %}
+                                                    {% if external.nvd.score %}
+                                                        <br><span style="font-weight: 600;">Score:</span> {{ external.nvd.score }} {{ '(' ~ external.nvd.score_version ~ ')' if external.nvd.score_version }}
+                                                    {% endif %}
+                                                    {% if external.nvd.vector %}
+                                                        <br><span style="font-weight: 600;">Vector:</span> {{ external.nvd.vector }}
+                                                    {% endif %}
+                                                    {% if external.nvd.published %}
+                                                        <br><span style="font-weight: 600;">Published:</span> {{ external.nvd.published }}
+                                                    {% endif %}
+                                                    {% if external.nvd.references %}
+                                                        <br><span style="font-weight: 600;">References:</span>
+                                                        <ul style="margin: 0.5rem 0 0 1rem;">
+                                                            {% for ref in external.nvd.references[:3] %}
+                                                                <li style="line-height: 1.4;"><a href="{{ ref }}" target="_blank">{{ ref }}</a></li>
+                                                            {% endfor %}
+                                                        </ul>
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if external.exploitdb %}
+                                            <div class="card" style="background: var(--bg-secondary); border-left: 3px solid var(--btn-warning);">
+                                                <div class="flex items-center gap-sm" style="margin-bottom: var(--space-sm);">
+                                                    <i class="fas fa-code"></i>
+                                                    <strong>ExploitDB</strong>
+                                                </div>
+                                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                                    {% if external.exploitdb.count %}
+                                                        <span style="font-weight: 600;">Exploits:</span> {{ external.exploitdb.count }}
+                                                    {% endif %}
+                                                    {% if external.exploitdb.exploits %}
+                                                        <br><span style="font-weight: 600;">Latest Exploit:</span>
+                                                        <span>{{ external.exploitdb.exploits[0].description or external.exploitdb.exploits[0].title }}</span>
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if external.vulndb %}
+                                            <div class="card" style="background: var(--bg-secondary); border-left: 3px solid var(--btn-success);">
+                                                <div class="flex items-center gap-sm" style="margin-bottom: var(--space-sm);">
+                                                    <i class="fas fa-exclamation-triangle"></i>
+                                                    <strong>VulnDB</strong>
+                                                </div>
+                                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                                    {% if external.vulndb.severity %}
+                                                        <span style="font-weight: 600;">Severity:</span> {{ external.vulndb.severity }}
+                                                    {% endif %}
+                                                    {% if external.vulndb.cvss_score %}
+                                                        <br><span style="font-weight: 600;">CVSS:</span> {{ external.vulndb.cvss_score }}
+                                                    {% endif %}
+                                                    {% if external.vulndb.description %}
+                                                        <br><span style="font-weight: 600;">Summary:</span> {{ external.vulndb.description }}
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
                             {% if cve.confidence %}
                                 <small style="color: var(--text-muted);">Confidence: {{ cve.confidence }}</small>
                             {% endif %}
@@ -207,15 +286,46 @@
                                 {% set header_label = detail.header %}
                                 {% set message = detail.message %}
                                 {% set has_fix = detail.has_fix %}
+                                {% set is_new_vuln = detail.header not in ['Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options', 'Content-Security-Policy', 'X-XSS-Protection', 'Referrer-Policy', 'Permissions-Policy'] %}
                             {% else %}
                                 {% set header_label = detail %}
                                 {% set message = detail %}
                                 {% set has_fix = False %}
+                                {% set is_new_vuln = False %}
                             {% endif %}
-                            <div class="report-card missing-header-card" style="border-left-color: var(--btn-warning);">
+                            
+                            {% set severity_class = 'badge-warning' %}
+                            {% set severity_text = 'MISSING' %}
+                            {% set border_color = 'var(--btn-warning)' %}
+                            
+                            {% if is_new_vuln %}
+                                {% if header_label == 'React-Server-Components-RCE' %}
+                                    {% set severity_class = 'badge-danger' %}
+                                    {% set severity_text = 'CRITICAL' %}
+                                    {% set border_color = 'var(--btn-danger)' %}
+                                {% elif header_label in ['Server', 'Cookie-Security'] %}
+                                    {% set severity_class = 'badge-warning' %}
+                                    {% set severity_text = 'MEDIUM' %}
+                                    {% set border_color = 'var(--btn-warning)' %}
+                                {% else %}
+                                    {% set severity_class = 'badge-info' %}
+                                    {% set severity_text = 'INFO' %}
+                                    {% set border_color = 'var(--btn-info)' %}
+                                {% endif %}
+                            {% endif %}
+                            
+                            <div class="report-card missing-header-card" style="border-left-color: '{{ border_color }}';">
                                 <div class="report-title" style="margin-bottom: var(--space-sm); font-size: 1rem;">
-                                    {{ header_label }}
-                                    <span class="badge badge-warning">MISSING</span>
+                                    {% if is_new_vuln %}
+                                        <i class="fas fa-shield-virus" style="margin-right: 6px; color: '{{ border_color }}';"></i>
+                                        {{ header_label.replace('-', ' ').title() }}
+                                    {% else %}
+                                        {{ header_label }}
+                                    {% endif %}
+                                    <span class="badge {{ severity_class }}">{{ severity_text }}</span>
+                                    {% if is_new_vuln %}
+                                        <span class="badge badge-outline" style="font-size: 0.7rem; margin-left: 4px;">NEW 2024-25</span>
+                                    {% endif %}
                                 </div>
                                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: var(--space-sm);">
                                     {{ message }}

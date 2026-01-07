@@ -40,7 +40,26 @@
                         </div>
                         <div class="summary-item">
                             <div class="summary-label">Severity</div>
-                            <div class="summary-value badge badge-danger" style="display: inline-block;">{{ fix.severity }}</div>
+                            {% set severity_lower = fix.severity | lower %}
+                            {% if severity_lower == 'critical' %}
+                                <div class="summary-value badge badge-danger" style="display: inline-block;">
+                                    <i class="fas fa-exclamation-triangle" style="margin-right: 6px;"></i>{{ fix.severity }}
+                                </div>
+                            {% elif severity_lower == 'high' %}
+                                <div class="summary-value badge badge-danger" style="display: inline-block;">
+                                    <i class="fas fa-shield-virus" style="margin-right: 6px;"></i>{{ fix.severity }}
+                                </div>
+                            {% elif severity_lower == 'medium' %}
+                                <div class="summary-value badge badge-warning" style="display: inline-block;">
+                                    <i class="fas fa-exclamation-triangle" style="margin-right: 6px;"></i>{{ fix.severity }}
+                                </div>
+                            {% elif severity_lower == 'low' %}
+                                <div class="summary-value badge badge-info" style="display: inline-block;">
+                                    <i class="fas fa-info-circle" style="margin-right: 6px;"></i>{{ fix.severity }}
+                                </div>
+                            {% else %}
+                                <div class="summary-value badge badge-secondary" style="display: inline-block;">{{ fix.severity }}</div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
