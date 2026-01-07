@@ -1,1 +1,4 @@
 .DS_Store
+reports/
+.secure/httpmr.db
+__pycache__

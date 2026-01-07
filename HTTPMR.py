@@ -326,6 +326,12 @@ def save_json_report(output_file, url, method, payload_params, resp, elapsed, wo
     """Save test results to a JSON file."""
     indicators = detect_vulnerability_indicators(resp, payload_params)
     
+    # Ensure output file is in reports directory
+    if not os.path.dirname(output_file):
+        reports_dir = os.path.join(os.path.dirname(__file__), "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+        output_file = os.path.join(reports_dir, output_file)
+    
     report = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "test_config": {
@@ -464,6 +470,7 @@ def analyze_security_headers(url, verbose=False):
     headers_analysis = {
         "present": {},
         "missing": [],
+        "missing_details": [],
         "score": 0,
         "max_score": 100
     }
@@ -496,6 +503,10 @@ def analyze_security_headers(url, verbose=False):
                     print(f"{Color.GREEN}[+] {header_name}: {value[:60]}...{Color.RESET}")
             else:
                 headers_analysis['missing'].append(details['missing_msg'])
+                headers_analysis['missing_details'].append({
+                    "header": header_name,
+                    "message": details['missing_msg']
+                })
                 if verbose:
                     print(f"{Color.RED}[-] {header_name}: Missing{Color.RESET}")
         
@@ -923,6 +934,12 @@ def auto_mode_test(url, verbose=False, output_file=None):
     # Save report if requested
     if output_file:
         try:
+            # Ensure output file is in reports directory
+            if not os.path.dirname(output_file):
+                reports_dir = os.path.join(os.path.dirname(__file__), "reports")
+                os.makedirs(reports_dir, exist_ok=True)
+                output_file = os.path.join(reports_dir, output_file)
+            
             with open(output_file, 'w') as f:
                 json.dump(auto_results, f, indent=2)
             print(f"\n{Color.GREEN}✓ Report saved to: {output_file}{Color.RESET}")
@@ -1047,6 +1064,12 @@ def main():
                         
                         if output_file:
                             try:
+                                # Ensure output file is in reports directory
+                                if not os.path.dirname(output_file):
+                                    reports_dir = os.path.join(os.path.dirname(__file__), "reports")
+                                    os.makedirs(reports_dir, exist_ok=True)
+                                    output_file = os.path.join(reports_dir, output_file)
+                                
                                 report_data = {
                                     "wordpress_info": wordpress_data,
                                     "cve_results": cve_results,

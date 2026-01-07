@@ -4,53 +4,41 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HTTPMR - Running Scan</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f6f8fb; color:#111827; min-height:100vh; padding:20px; }
-        .container { max-width: 980px; margin: 0 auto; }
-        .card { background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 6px 18px rgba(16,24,40,0.04); }
-        .back-link { color: #2563eb; text-decoration:none; font-weight:600; display:inline-block; margin-bottom:12px; }
-        h1 { font-size:1.4rem; color:#0f172a; margin-bottom:6px; }
-        .target-info { color:#475569; margin-bottom:6px; }
-        .output-file { color:#6b7280; font-family: monospace; font-size:0.9rem; word-break:break-all; }
-        .controls { display:flex; gap:10px; margin:12px 0; }
-        button { padding:10px 16px; border-radius:6px; border:none; font-weight:700; cursor:pointer; }
-        .btn-primary { background:#2563eb; color:#fff; }
-        .btn-primary:disabled { opacity:0.6; cursor:not-allowed; }
-        #log { background: #0b1220; color:#d1d5db; padding:16px; height:420px; overflow:auto; font-family:monospace; border-radius:6px; font-size:0.9rem; line-height:1.4; }
-        .status { padding:8px 12px; border-radius:6px; margin-bottom:12px; font-weight:700; }
-        .status-running { background:#e6f0ff; color:#1e3a8a; }
-        .status-finished { background:#ecfdf5; color:#166534; }
-        .status-error { background:#fff1f2; color:#9f1239; }
-        .spinner { display:inline-block; width:14px; height:14px; border:2px solid transparent; border-top-color:currentColor; border-radius:50%; animation:spin .8s linear infinite; }
-        @keyframes spin { to{ transform:rotate(360deg);} }
-    </style>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HTTPMR Design System -->
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <div class="container">
         <div class="card">
-            <a href="/" class="back-link">← Back to Dashboard</a>
+            <a href="/" class="btn btn-outline btn-sm" style="margin-bottom: var(--space-md);">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
             
-            <div class="header">
-                <h1>🔍 Running Scan</h1>
+            <div class="card-header">
+                <h1 class="card-title"><i class="fas fa-search"></i> Running Scan</h1>
                 <div class="target-info">Target: <strong>{{ target }}</strong></div>
-                <div class="output-file">📁 {{ outpath }}</div>
+                <div class="output-file"><i class="fas fa-folder"></i> {{ outpath }}</div>
             </div>
 
             <div id="status" class="status status-running">
                 <span class="spinner"></span> Scan in progress...
             </div>
 
-            <div class="controls">
-                <button id="downloadBtn" class="btn-primary" disabled>💾 Download Report</button>
-                <button id="viewBtn" class="btn-primary" disabled>👁️ View Report</button>
+            <div class="flex gap-md">
+                <button id="downloadBtn" class="btn btn-primary" disabled><i class="fas fa-download"></i> Download Report</button>
+                <button id="viewBtn" class="btn btn-primary" disabled><i class="fas fa-eye"></i> View Report</button>
             </div>
 
-            <div id="log">Connecting to stream...</div>
+            <div id="log" class="log-output">Connecting to stream...</div>
         </div>
     </div>
 
+    <!-- ANSI Up Library -->
     <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.0.0/ansi_up.min.js"></script>
+    <!-- HTTPMR UI JavaScript -->
+    <script src="/static/js/ui.js"></script>
     <script>
         const jobId = "{{ job_id }}";
         const outpath = "{{ outpath }}";
@@ -91,10 +79,10 @@
                 const rc = text.includes('rc=0') ? 0 : 1;
                 if(rc === 0) {
                     statusDiv.className = 'status status-finished';
-                    statusDiv.innerHTML = '✅ Scan completed successfully!';
+                    statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Scan completed successfully!';
                 } else {
                     statusDiv.className = 'status status-error';
-                    statusDiv.innerHTML = '⚠️ Scan completed with errors (rc=' + rc + ')';
+                    statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Scan completed with errors (rc=' + rc + ')';
                 }
                 downloadBtn.disabled = false;
                 viewBtn.disabled = false;
@@ -105,7 +93,7 @@
         ws.onerror = (e) => {
             appendLine('[websocket error]');
             statusDiv.className = 'status status-error';
-            statusDiv.innerHTML = '❌ Connection error';
+            statusDiv.innerHTML = '<i class="fas fa-times-circle"></i> Connection error';
         };
 
         downloadBtn.addEventListener('click', () => {

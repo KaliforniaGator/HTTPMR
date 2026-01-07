@@ -1,60 +1,98 @@
 <!doctype html>
-<html>
-  <head>
+<html lang="en">
+<head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HTTPMR - Reports & Scan Runner</title>
-    <style>
-      body{font-family:Arial;max-width:900px;margin:2rem auto;padding:1rem}
-      h1{color:#1f618d}
-      table{width:100%;border-collapse:collapse}
-      td,th{border:1px solid #ddd;padding:.5rem}
-      .btn{padding:.4rem .7rem;background:#1f618d;color:#fff;border-radius:4px;text-decoration:none}
-      form .row{margin:.5rem 0}
-    </style>
-  </head>
-  <body>
-    <h1>HTTPMR - Reports & Scan Runner</h1>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HTTPMR Design System -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="dashboard-header">
+            <h1><i class="fas fa-search"></i> HTTPMR - Reports & Scan Runner</h1>
+            <p class="subtitle">HTTP & Web Vulnerability Assessment Tool</p>
+        </header>
 
-    <h2>Start a Scan</h2>
-    <form id="scanForm" action="/run" method="post">
-      <div class="row">
-        <label>Target URL: <input type="text" name="target" placeholder="https://example.com" required style="width:60%" /></label>
-      </div>
-      <div class="row">
-        <label>Mode: <select name="mode"><option value="auto">Auto (default)</option></select></label>
-      </div>
-      <div class="row">
-        <button type="submit" class="btn">Start Scan</button>
-      </div>
-    </form>
+        <div class="grid grid-cols-2">
+            <!-- Scan Form -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-rocket"></i> Start a Scan</h2>
+                </div>
+                <form id="scanForm" action="/run" method="post">
+                    <div class="form-group">
+                        <label for="target">Target URL</label>
+                        <input type="text" name="target" id="target" placeholder="https://example.com" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="mode">Mode</label>
+                        <select name="mode" id="mode">
+                            <option value="auto">Auto (default)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Start Scan</button>
+                </form>
+            </div>
 
-    <h2>Upload a report</h2>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-      <input type="file" name="file" accept="application/json" required />
-      <button type="submit" class="btn">Upload</button>
-    </form>
+            <!-- Upload Form -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-upload"></i> Upload a Report</h2>
+                </div>
+                <form action="/upload" method="post" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="file">Choose JSON Report</label>
+                        <input type="file" name="file" id="file" accept="application/json" required />
+                    </div>
+                    <button type="submit" class="btn btn-secondary">Upload</button>
+                </form>
+            </div>
+        </div>
 
-    <h2>Available reports</h2>
-    {% if reports %}
-      <table>
-        <tr><th>Filename</th><th>Actions</th></tr>
-        {% for r in reports %}
-        <tr>
-          <td>{{ r }}</td>
-          <td>
-            <a class="btn" href="/view?name={{ r }}">View</a>
-            <form style="display:inline" method="post" action="/run_tester">
-              <input type="hidden" name="report" value="{{ r }}" />
-              <button class="btn">Run Tester</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
-    {% else %}
-      <p>No reports found in repository root.</p>
-    {% endif %}
+        <!-- Reports Table -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title"><i class="fas fa-clipboard-list"></i> Available Reports</h2>
+            </div>
+            {% if reports %}
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border-primary);">
+                            <th style="padding: var(--space-md); text-align: left; color: var(--text-secondary);">Filename</th>
+                            <th style="padding: var(--space-md); text-align: left; color: var(--text-secondary);">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in reports %}
+                        <tr style="border-bottom: 1px solid var(--border-primary);">
+                            <td style="padding: var(--space-md);">{{ r }}</td>
+                            <td style="padding: var(--space-md);">
+                                <div class="flex gap-sm">
+                                    <a class="btn btn-primary btn-sm" href="/view?name={{ r }}">View</a>
+                                    <form method="post" action="/run_tester" style="display: inline;">
+                                        <input type="hidden" name="report" value="{{ r }}" />
+                                        <button class="btn btn-secondary btn-sm">Run Tester</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No reports found in repository root.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
 
+    <!-- HTTPMR UI JavaScript -->
+    <script src="/static/js/ui.js"></script>
     <script>
       const form = document.getElementById('scanForm');
       form.addEventListener('submit', async (ev) => {

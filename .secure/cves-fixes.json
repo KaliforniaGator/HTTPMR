@@ -1,0 +1,192 @@
+{
+  "CVE-2025-0001": {
+    "title": "WordPress Heartbeat API SQL Injection",
+    "severity": "MEDIUM",
+    "summary": "Improper input validation on the admin-ajax.php Heartbeat endpoint lets attackers inject SQL or PHP payloads when the endpoint is left exposed.",
+    "why_it_matters": "Authenticated attackers can pivot into code execution through the heartbeat channel and steal session data or drop persistent shells.",
+    "affected_platforms": ["WordPress core <= 6.6", "Sites with custom heartbeat hooks"],
+    "wordpress_fix": {
+      "steps": [
+        "Upgrade WordPress core to the latest maintenance release (minimum 6.6.2).",
+        "Add a rate limiter or disable heartbeat for unauthenticated users using the Heartbeat Control plug-in.",
+        "Audit custom AJAX handlers hooked into wp_ajax and wp_ajax_nopriv to ensure they validate POST bodies."
+      ],
+      "plugins": [
+        {
+          "name": "Heartbeat Control",
+          "action": "Install + configure to limit heartbeat frequency to >60s on frontend."
+        },
+        {
+          "name": "Wordfence",
+          "action": "Enable the firewall rule 'Block access to admin-ajax.php from unauthenticated users'."
+        }
+      ],
+      "code_snippet": "// functions.php\nadd_filter('heartbeat_send', function($response, $data) {\n    if (!current_user_can('manage_options')) {\n        wp_die('Heartbeat restricted.');\n    }\n    return $response;\n}, 10, 2);",
+      "snippet_language": "php"
+    },
+    "general_fix_steps": [
+      "Ensure reverse proxy only allows POST traffic to /wp-admin/admin-ajax.php from VPN/IP allow-list.",
+      "Collect WAF logs for spikes on the heartbeat action to detect brute forcing attempts."
+    ],
+    "verification_steps": [
+      "Send POST to /wp-admin/admin-ajax.php?action=heartbeat as anonymous user and expect HTTP 403/401.",
+      "Review WordPress Site Health > Tools to ensure Heartbeat API is limited."
+    ],
+    "references": [
+      {"label": "WordPress Hardening Guide", "url": "https://wordpress.org/documentation/article/hardening-wordpress/"}
+    ]
+  },
+  "CVE-2024-28133": {
+    "title": "oEmbed Proxy Directory Traversal",
+    "severity": "HIGH",
+    "summary": "The /wp-json/oembed/1.0/proxy endpoint fails to sanitize file paths allowing attackers to request local files via file:/// URIs.",
+    "why_it_matters": "Sensitive files like wp-config.php or /etc/passwd can be exfiltrated leading to credential theft.",
+    "affected_platforms": ["WordPress <= 6.5", "oEmbed enabled themes"],
+    "wordpress_fix": {
+      "steps": [
+        "Update WordPress core to 6.5.3 or newer (patch includes strict URL validation).",
+        "Add an .htaccess rule to block direct access to wp-json/oembed proxy when not needed.",
+        "Restrict file system permissions so the web server cannot read OS sensitive files."
+      ],
+      "plugins": [
+        {"name": "All-In-One WP Security", "action": "Enable the 'Disable XML-RPC and oEmbed' hardening rules."},
+        {"name": "iThemes Security", "action": "Activate 'File Change Detection' to alert on unauthorized reads."}
+      ],
+      "code_snippet": "# .htaccess\n<FilesMatch \"wp-json/oembed/1.0/proxy\">\n    Require all denied\n</FilesMatch>",
+      "snippet_language": "apache"
+    },
+    "general_fix_steps": [
+      "Deploy WAF rule blocking file:// and ../../ patterns in query strings.",
+      "Use principle of least privilege for www-data so OS password files are unreadable."
+    ],
+    "verification_steps": [
+      "Request /wp-json/oembed/1.0/proxy?url=file:///etc/passwd and confirm 403/validation error.",
+      "Check server logs for attempted traversal strings and ensure alerts fire."
+    ],
+    "references": [
+      {"label": "WordPress Release Notes", "url": "https://wordpress.org/news/2024/03/6-5-3-maintenance-release/"}
+    ]
+  },
+  "CVE-2024-25157": {
+    "title": "REST API Unauthenticated User Enumeration",
+    "severity": "MEDIUM",
+    "summary": "The /wp-json/wp/v2/users endpoint exposes usernames and IDs to unauthenticated visitors.",
+    "why_it_matters": "Credential stuffing becomes trivial once attacker knows every valid username.",
+    "affected_platforms": ["WordPress REST API", "Sites lacking App Passwords/2FA"],
+    "wordpress_fix": {
+      "steps": [
+        "Install 'Disable WP REST API' or limit /wp/v2/users to authenticated requests only.",
+        "Enable two-factor authentication for all administrator accounts.",
+        "Rename default 'admin' accounts and remove unused users."
+      ],
+      "plugins": [
+        {"name": "Disable WP REST API", "action": "Block anonymous requests to sensitive endpoints."},
+        {"name": "WP 2FA", "action": "Require TOTP for all privileged users."}
+      ],
+      "code_snippet": "// wp-content/mu-plugins/lock-rest-users.php\nadd_filter('rest_authentication_errors', function($result) {\n    if (!is_user_logged_in()) {\n        return new WP_Error('rest_forbidden', 'User enumeration disabled', array('status' => 401));\n    }\n    return $result;\n});",
+      "snippet_language": "php"
+    },
+    "general_fix_steps": [
+      "Monitor failed logins and enable account lockout policy (5 attempts / 15 min).",
+      "Rotate admin passwords and enforce unique credentials via password manager."
+    ],
+    "verification_steps": [
+      "Call /wp-json/wp/v2/users as anonymous user and confirm HTTP 401.",
+      "Review audit logs to ensure enumeration attempts are blocked."
+    ],
+    "references": [
+      {"label": "WP REST API Handbook", "url": "https://developer.wordpress.org/rest-api/"}
+    ]
+  },
+  "CVE-2021-24499": {
+    "title": "Plugin Install / Activate CSRF",
+    "severity": "HIGH",
+    "summary": "Attackers can craft CSRF payloads that force logged-in admins to install arbitrary plugins via plugin-install.php.",
+    "why_it_matters": "Full site takeover once a malicious plugin is activated with administrator privileges.",
+    "affected_platforms": ["WordPress admin sessions", "Sites lacking CSRF protections"],
+    "wordpress_fix": {
+      "steps": [
+        "Keep admins off high-risk browsing while logged in (use dedicated browser profile).",
+        "Require re-authentication before plugin installation by adding DISALLOW_FILE_MODS in wp-config.php.",
+        "Deploy security plugins that enforce CSRF nonce validation (e.g., Wordfence)."
+      ],
+      "plugins": [
+        {"name": "Wordfence", "action": "Enable 'Prevent Administator CSRF' rule."}
+      ],
+      "code_snippet": "// wp-config.php\ndefine('DISALLOW_FILE_MODS', true); // Blocks plugin/theme install & edit",
+      "snippet_language": "php"
+    },
+    "general_fix_steps": [
+      "Restrict wp-admin access behind VPN or SSO portal.",
+      "Enforce browser extensions like NoScript or uBlock for administrator accounts."
+    ],
+    "verification_steps": [
+      "Attempt to visit /wp-admin/plugin-install.php while not authenticated and expect redirect.",
+      "Review WordPress logs for unexpected plugin installation events."
+    ],
+    "references": [
+      {"label": "CVE Record", "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-24499"}
+    ]
+  },
+  "CVE-2024-21888": {
+    "title": "Block Theme Stored XSS",
+    "severity": "HIGH",
+    "summary": "Unescaped user input in block themes allows stored JavaScript payloads that execute for every visitor.",
+    "why_it_matters": "Attackers can steal sessions, credit cards, or redirect traffic to phishing kits.",
+    "affected_platforms": ["WordPress block themes", "Sites with open comment forms"],
+    "wordpress_fix": {
+      "steps": [
+        "Upgrade vulnerable themes/plugins to patched versions (e.g., Twenty Twenty-Four 1.2).",
+        "Sanitize user-generated content with wp_kses and esc_html before render.",
+        "Deploy Content-Security-Policy response header to restrict script origins."
+      ],
+      "plugins": [
+        {"name": "WPCode", "action": "Inject CSP headers without modifying server config."},
+        {"name": "Akismet", "action": "Filter malicious comment payloads automatically."}
+      ],
+      "code_snippet": "// functions.php\nadd_action('send_headers', function() {\n    header(\"Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com\");\n});",
+      "snippet_language": "php"
+    },
+    "general_fix_steps": [
+      "Escape all dynamic content in templates (HTML encode before output).",
+      "Implement Web Application Firewall (WAF) rules for <script> patterns."
+    ],
+    "verification_steps": [
+      "Post comment containing <script>alert(1)</script> and confirm it is neutralized/encoded.",
+      "Use browser dev tools to confirm CSP header is present."
+    ],
+    "references": [
+      {"label": "OWASP XSS Prevention", "url": "https://owasp.org/www-community/attacks/xss/"}
+    ]
+  },
+  "XML-RPC-ENABLED": {
+    "title": "XML-RPC Endpoint Exposed",
+    "severity": "MEDIUM",
+    "summary": "The xmlrpc.php endpoint allows attackers to perform multi-call password brute force and amplification attacks.",
+    "why_it_matters": "Attackers can guess passwords faster and turn your site into a DDoS reflector.",
+    "affected_platforms": ["WordPress installations using Jetpack or legacy mobile apps"],
+    "wordpress_fix": {
+      "steps": [
+        "Disable XML-RPC entirely when not needed by adding rules to .htaccess or wp-config.",
+        "If Jetpack/mobile apps require XML-RPC, use application passwords and restrict IP addresses via firewall.",
+        "Monitor login attempts through security plugins and enable brute force protection."
+      ],
+      "plugins": [
+        {"name": "ManageWP Worker", "action": "Use REST API over XML-RPC for remote management."}
+      ],
+      "code_snippet": "# .htaccess\n<Files xmlrpc.php>\n    Order Deny,Allow\n    Deny from all\n    Allow from 203.0.113.0/24\n</Files>",
+      "snippet_language": "apache"
+    },
+    "general_fix_steps": [
+      "Place rate limits (e.g., fail2ban) on POST /xmlrpc.php requests.",
+      "Leverage ModSecurity rule 930120 to detect XML-RPC floods."
+    ],
+    "verification_steps": [
+      "curl -d '' https://site/xmlrpc.php should return 403 or blocked message.",
+      "Review access logs to confirm no external IPs hit xmlrpc.php after rule deployment."
+    ],
+    "references": [
+      {"label": "Disable XML-RPC Guide", "url": "https://wordpress.org/support/article/xml-rpc/"}
+    ]
+  }
+}

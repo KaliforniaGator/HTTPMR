@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTTPMR - {{ cve_id }} Fix Guide</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container" style="padding-bottom: var(--space-xxl);">
+        <div class="flex justify-between items-center" style="margin-bottom: var(--space-lg);">
+            <a href="javascript:history.back()" class="btn btn-outline btn-sm">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+            <div class="user-info">
+                <button class="btn btn-secondary btn-sm" style="cursor: default;" disabled>
+                    <i class="fas fa-user"></i> {{ username }}
+                </button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--space-xl);">
+            <div class="card-header">
+                <h1 class="card-title"><i class="fas fa-wrench"></i> {{ cve_id }} Remediation Guide</h1>
+            </div>
+            {% if not fix %}
+                <div class="empty-state">
+                    <i class="fas fa-hourglass-half"></i>
+                    <h2>Fix documentation coming soon.</h2>
+                    <p>We detected {{ cve_id }}, but the remediation steps have not been published yet. Please check again later or follow standard vendor security guidance.</p>
+                </div>
+            {% else %}
+                <div class="detail-summary">
+                    <div class="detail-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Title</div>
+                            <div class="summary-value" style="font-size: 1.15rem;">{{ fix.title }}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Severity</div>
+                            <div class="summary-value badge badge-danger" style="display: inline-block;">{{ fix.severity }}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Why it matters</div>
+                            <div class="summary-value" style="font-size: 0.95rem; color: var(--text-secondary);">{{ fix.why_it_matters }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if fix.summary %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-circle-info"></i> Overview</h2>
+                        </div>
+                        <p style="margin: 0; color: var(--text-secondary);">{{ fix.summary }}</p>
+                    </section>
+                {% endif %}
+
+                {% if fix.affected_platforms %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-layer-group"></i> Affected Platforms</h2>
+                        </div>
+                        <ul>
+                            {% for platform in fix.affected_platforms %}
+                                <li>{{ platform }}</li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                {% endif %}
+
+                {% if fix.wordpress_fix %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fab fa-wordpress"></i> WordPress Hardening Steps</h2>
+                        </div>
+                        {% if fix.wordpress_fix.steps %}
+                            <h3>Remediation Checklist</h3>
+                            <ol>
+                                {% for step in fix.wordpress_fix.steps %}
+                                    <li>{{ step }}</li>
+                                {% endfor %}
+                            </ol>
+                        {% endif %}
+
+                        {% if fix.wordpress_fix.plugins %}
+                            <h3 style="margin-top: var(--space-md);">Recommended Plugins</h3>
+                            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md);">
+                                {% for plugin in fix.wordpress_fix.plugins %}
+                                    <div class="card" style="background: var(--bg-secondary); margin: 0;">
+                                        <div class="card-header" style="border-bottom: none;">
+                                            <h4 class="card-title" style="margin: 0; font-size: 1rem;">
+                                                <i class="fas fa-plug"></i> {{ plugin.name }}
+                                            </h4>
+                                        </div>
+                                        <p style="margin: 0; color: var(--text-secondary);">{{ plugin.action }}</p>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% if fix.wordpress_fix.code_snippet %}
+                            <h3 style="margin-top: var(--space-md);">Code Fix</h3>
+                            <pre class="code-block"><code class="language-{{ fix.wordpress_fix.snippet_language or 'text' }}">{{ fix.wordpress_fix.code_snippet }}</code></pre>
+                        {% endif %}
+                    </section>
+                {% endif %}
+
+                {% if fix.general_fix_steps %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-shield-alt"></i> Infrastructure Mitigations</h2>
+                        </div>
+                        <ul>
+                            {% for step in fix.general_fix_steps %}
+                                <li>{{ step }}</li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                {% endif %}
+
+                {% if fix.verification_steps %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-vial-circle-check"></i> Validation</h2>
+                        </div>
+                        <ol>
+                            {% for step in fix.verification_steps %}
+                                <li>{{ step }}</li>
+                            {% endfor %}
+                        </ol>
+                    </section>
+                {% endif %}
+
+                {% if fix.references %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-book"></i> References</h2>
+                        </div>
+                        <ul>
+                            {% for ref in fix.references %}
+                                <li><a href="{{ ref.url }}" target="_blank" rel="noopener">{{ ref.label or ref.url }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('pre code').forEach(block => {
+            block.addEventListener('click', () => {
+                navigator.clipboard.writeText(block.textContent);
+                block.classList.add('copied');
+                setTimeout(() => block.classList.remove('copied'), 800);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTTPMR - {{ header_name }} Fix Guide</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container" style="padding-bottom: var(--space-xxl);">
+        <div class="flex justify-between items-center" style="margin-bottom: var(--space-lg);">
+            <a href="javascript:history.back()" class="btn btn-outline btn-sm">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+            <div class="user-info">
+                <button class="btn btn-secondary btn-sm" style="cursor: default;" disabled>
+                    <i class="fas fa-user"></i> {{ username }}
+                </button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--space-xl);">
+            <div class="card-header">
+                <h1 class="card-title"><i class="fas fa-screwdriver-wrench"></i> {{ header_name }} Remediation Guide</h1>
+            </div>
+
+            {% if not fix %}
+                <div class="empty-state">
+                    <i class="fas fa-hourglass-half"></i>
+                    <h2>Fix documentation coming soon.</h2>
+                    <p>We detected that {{ header_name }} needs attention, but the remediation steps have not been published yet.</p>
+                </div>
+            {% else %}
+                <div class="detail-summary">
+                    <div class="detail-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Title</div>
+                            <div class="summary-value" style="font-size: 1.15rem;">{{ fix.title }}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Severity</div>
+                            <div class="summary-value badge badge-danger" style="display: inline-block;">{{ fix.severity }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if fix.summary %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-circle-info"></i> Why it matters</h2>
+                        </div>
+                        <p style="margin: 0; color: var(--text-secondary);">{{ fix.summary }}</p>
+                    </section>
+                {% endif %}
+
+                {% if fix.why_it_matters %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-exclamation-triangle"></i> Risk</h2>
+                        </div>
+                        <p style="margin: 0; color: var(--text-secondary);">{{ fix.why_it_matters }}</p>
+                    </section>
+                {% endif %}
+
+                {% if fix.fix_steps %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-list-check"></i> Remediation Checklist</h2>
+                        </div>
+                        <ol>
+                            {% for step in fix.fix_steps %}
+                                <li>{{ step }}</li>
+                            {% endfor %}
+                        </ol>
+                    </section>
+                {% endif %}
+
+                {% if fix.server_snippets %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-code"></i> Server Config Snippets</h2>
+                        </div>
+                        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-md);">
+                            {% for server, snippet in fix.server_snippets.items() %}
+                                {% set snippet_id = 'server-snippet-' ~ loop.index %}
+                                <div class="card" style="background: var(--bg-secondary); margin: 0;">
+                                    <div class="card-header" style="border-bottom: none;">
+                                        <div class="flex justify-between items-center" style="gap: var(--space-sm);">
+                                            <h4 class="card-title" style="margin: 0; font-size: 1rem; text-transform: capitalize;">
+                                                <i class="fas fa-server"></i> {{ server }}
+                                            </h4>
+                                            <button
+                                                class="btn btn-outline btn-xs copy-btn"
+                                                type="button"
+                                                data-copy-target="#{{ snippet_id }}"
+                                                title="Copy snippet"
+                                            >
+                                                <i class="fas fa-copy copy-icon" aria-hidden="true"></i>
+                                                <i class="fas fa-check copy-icon-success" aria-hidden="true"></i>
+                                                <span class="sr-only">Copy {{ server }} snippet</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <pre class="code-block" id="{{ snippet_id }}"><code>{{ snippet }}</code></pre>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endif %}
+
+                {% if fix.code_snippets %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-laptop-code"></i> Application Snippets</h2>
+                        </div>
+                        <p style="margin-top: 0; color: var(--text-secondary);">
+                            Copy the snippet that matches your stack to add {{ header_name }} quickly.
+                        </p>
+                        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md);">
+                            {% for lang, snippet in fix.code_snippets.items() %}
+                                {% set snippet_id = 'app-snippet-' ~ loop.index %}
+                                <div class="card" style="background: var(--bg-secondary); margin: 0;">
+                                    <div class="card-header" style="border-bottom: none;">
+                                        <div class="flex justify-between items-center" style="gap: var(--space-sm);">
+                                            <h4 class="card-title" style="margin: 0; font-size: 1rem; text-transform: capitalize;">
+                                                <i class="fas fa-code-branch"></i> {{ lang }}
+                                            </h4>
+                                            <button
+                                                class="btn btn-outline btn-xs copy-btn"
+                                                type="button"
+                                                data-copy-target="#{{ snippet_id }}"
+                                                title="Copy snippet"
+                                            >
+                                                <i class="fas fa-copy copy-icon" aria-hidden="true"></i>
+                                                <i class="fas fa-check copy-icon-success" aria-hidden="true"></i>
+                                                <span class="sr-only">Copy {{ lang }} snippet</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <pre class="code-block" id="{{ snippet_id }}"><code>{{ snippet }}</code></pre>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endif %}
+
+                {% if fix.verification %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-vial-circle-check"></i> Validation Steps</h2>
+                        </div>
+                        <ol>
+                            {% for step in fix.verification %}
+                                <li>{{ step }}</li>
+                            {% endfor %}
+                        </ol>
+                    </section>
+                {% endif %}
+
+                {% if fix.references %}
+                    <section class="detail-section">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fas fa-book"></i> References</h2>
+                        </div>
+                        <ul>
+                            {% for ref in fix.references %}
+                                <li><a href="{{ ref.url }}" target="_blank" rel="noopener">{{ ref.label or ref.url }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </section>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const codeBlocks = document.querySelectorAll('pre code');
+        codeBlocks.forEach(block => {
+            block.addEventListener('click', () => {
+                navigator.clipboard.writeText(block.textContent.trim());
+                block.classList.add('copied');
+                setTimeout(() => block.classList.remove('copied'), 800);
+            });
+        });
+
+        const copyButtons = document.querySelectorAll('.copy-btn');
+        copyButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetSelector = btn.getAttribute('data-copy-target');
+                const targetBlock = document.querySelector(`${targetSelector} code`);
+                if (!targetBlock) return;
+                navigator.clipboard.writeText(targetBlock.textContent.trim()).then(() => {
+                    btn.classList.add('copied');
+                    btn.setAttribute('aria-label', 'Copied!');
+                    setTimeout(() => {
+                        btn.classList.remove('copied');
+                        btn.setAttribute('aria-label', 'Copy snippet');
+                    }, 1200);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

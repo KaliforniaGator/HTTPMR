@@ -1,0 +1,49 @@
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title"><i class="fas fa-chart-bar"></i> All Reports</h2>
+        <form class="sort-form" id="reportSortForm">
+            <label for="reportSortSelect" class="sr-only">Sort reports</label>
+            <select id="reportSortSelect" name="sort">
+                {% for option in sort_options %}
+                    <option value="{{ option.value }}" {% if option.value == current_sort %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+    {% if reports %}
+        <div class="reports-grid">
+            {% for item in reports %}
+                <div class="report-card">
+                    <div class="report-title">{{ item.filename }}</div>
+                    {% if item.summary.url %}
+                        <div class="report-url">{{ item.summary.url }}</div>
+                    {% endif %}
+                    {% if item.summary.timestamp %}
+                        <div class="report-meta"><i class="fas fa-calendar"></i> {{ item.summary.timestamp }}</div>
+                    {% endif %}
+                    {% if item.summary.vuln_count %}
+                        <span class="badge badge-danger">{{ item.summary.vuln_count }} Vulns</span>
+                    {% else %}
+                        <span class="badge badge-success">Clean</span>
+                    {% endif %}
+                    <span class="badge badge-secondary">
+                        Score:
+                        {{ item.summary.security_score if item.summary.security_score is defined else 'N/A' }}
+                    </span>
+                    <div class="report-actions">
+                        <a href="/view?name={{ item.filename }}" class="btn btn-primary btn-sm">View</a>
+                        <button class="btn btn-success btn-sm" onclick="convertSarif('{{ item.filename }}')">SARIF</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteReport('{{ item.filename }}')">Delete</button>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No reports found. Start a scan or upload one to get started!</p>
+        </div>
+    {% endif %}
+</div>

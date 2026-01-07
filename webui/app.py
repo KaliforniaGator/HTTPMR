@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 import json
@@ -13,10 +14,13 @@ import sqlite3
 import bcrypt
 import secrets
 import logging
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-REPORT_DIR = BASE_DIR
-DB_PATH = os.path.join(BASE_DIR, "httpmr.db")
+REPORT_DIR = os.path.join(BASE_DIR, "reports")
+DB_PATH = os.path.join(BASE_DIR, ".secure", "httpmr.db")
+CVE_FIXES_PATH = os.path.join(BASE_DIR, ".secure", "cves-fixes.json")
+HEADER_FIXES_PATH = os.path.join(BASE_DIR, ".secure", "header-fixes.json")
 SESSION_TIMEOUT = 24 * 60 * 60  # 24 hours
 
 # Setup logging
@@ -27,6 +31,18 @@ logger = logging.getLogger(__name__)
 JOBS = {}
 JOBS_LOCK = asyncio.Lock()
 SESSIONS = {}  # session_token -> {user_id, username, created_at}
+_CVE_FIXES_CACHE = {}
+_CVE_FIXES_MTIME = 0.0
+_HEADER_FIXES_CACHE = {}
+_HEADER_FIXES_MTIME = 0.0
+
+HEADER_MESSAGE_TO_NAME = {
+    "HSTS not configured": "Strict-Transport-Security",
+    "MIME type sniffing not prevented": "X-Content-Type-Options",
+    "Clickjacking not prevented": "X-Frame-Options",
+    "CSP not configured": "Content-Security-Policy",
+    "XSS protection not enabled": "X-XSS-Protection",
+}
 
 
 # ===== DATABASE INITIALIZATION =====
@@ -243,6 +259,134 @@ def _get_report_summary(path):
         return {'error': str(e)}
 
 
+SORT_OPTIONS = [
+    {"value": "newest", "label": "Newest first", "key": "timestamp", "reverse": True},
+    {"value": "oldest", "label": "Oldest first", "key": "timestamp", "reverse": False},
+    {"value": "score_desc", "label": "Score: high → low", "key": "score", "reverse": True},
+    {"value": "score_asc", "label": "Score: low → high", "key": "score", "reverse": False},
+    {"value": "name_asc", "label": "Name: A → Z", "key": "name", "reverse": False},
+    {"value": "name_desc", "label": "Name: Z → A", "key": "name", "reverse": True},
+]
+
+_SORT_OPTION_MAP = {opt["value"]: opt for opt in SORT_OPTIONS}
+DEFAULT_SORT_OPTION = _SORT_OPTION_MAP["newest"]
+
+
+def _get_sort_key(option):
+    key_name = option["key"]
+    reverse = option["reverse"]
+
+    if key_name == "timestamp":
+        fallback = datetime.min if reverse else datetime.max
+
+        def key(report):
+            summary = report.get("summary") or {}
+            ts = summary.get("timestamp")
+            if not ts:
+                return fallback
+            try:
+                return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return fallback
+
+        return key
+
+    if key_name == "score":
+        fallback = -1 if reverse else 101
+
+        def key(report):
+            summary = report.get("summary") or {}
+            score = summary.get("security_score")
+            try:
+                return float(score)
+            except (TypeError, ValueError):
+                return fallback
+
+        return key
+
+    # default to filename sort (case-insensitive)
+    def key(report):
+        return (report.get("filename") or "").lower()
+
+    return key
+
+
+def _fetch_reports(sort_value: str):
+    sort_option = _SORT_OPTION_MAP.get(sort_value, DEFAULT_SORT_OPTION)
+    sort_key = _get_sort_key(sort_option)
+
+    files = _list_reports()
+    reports = []
+    for filename in files:
+        path = os.path.join(REPORT_DIR, filename)
+        summary = _get_report_summary(path)
+        reports.append({'filename': filename, 'summary': summary})
+
+    reports = sorted(reports, key=sort_key, reverse=sort_option["reverse"])
+    return reports, sort_option
+
+
+def _load_cve_fixes():
+    """Load CVE fix metadata from secure storage with simple caching."""
+    global _CVE_FIXES_CACHE, _CVE_FIXES_MTIME
+    try:
+        if not os.path.exists(CVE_FIXES_PATH):
+            logger.warning("CVE fixes file not found at %s", CVE_FIXES_PATH)
+            return {}
+        mtime = os.path.getmtime(CVE_FIXES_PATH)
+        if mtime != _CVE_FIXES_MTIME:
+            with open(CVE_FIXES_PATH, 'r') as f:
+                _CVE_FIXES_CACHE = json.load(f)
+            _CVE_FIXES_MTIME = mtime
+            logger.info("Loaded %d CVE fix definitions", len(_CVE_FIXES_CACHE))
+        return _CVE_FIXES_CACHE
+    except json.JSONDecodeError as e:
+        logger.error("Invalid JSON in CVE fixes file: %s", e)
+        return {}
+    except Exception as e:
+        logger.error("Failed to load CVE fixes: %s", e)
+        return {}
+
+
+def _get_cve_fix(cve_id: str):
+    """Return fix metadata for a CVE ID."""
+    if not cve_id:
+        return None
+    fixes = _load_cve_fixes()
+    # prefer exact match, fall back to uppercase normalization
+    return fixes.get(cve_id) or fixes.get(cve_id.upper())
+
+
+def _load_header_fixes():
+    """Load header fix metadata from secure storage with caching."""
+    global _HEADER_FIXES_CACHE, _HEADER_FIXES_MTIME
+    try:
+        if not os.path.exists(HEADER_FIXES_PATH):
+            logger.warning("Header fixes file not found at %s", HEADER_FIXES_PATH)
+            return {}
+        mtime = os.path.getmtime(HEADER_FIXES_PATH)
+        if mtime != _HEADER_FIXES_MTIME:
+            with open(HEADER_FIXES_PATH, 'r') as f:
+                _HEADER_FIXES_CACHE = json.load(f)
+            _HEADER_FIXES_MTIME = mtime
+            logger.info("Loaded %d header fix definitions", len(_HEADER_FIXES_CACHE))
+        return _HEADER_FIXES_CACHE
+    except json.JSONDecodeError as e:
+        logger.error("Invalid JSON in header fixes file: %s", e)
+        return {}
+    except Exception as e:
+        logger.error("Failed to load header fixes: %s", e)
+        return {}
+
+
+def _get_header_fix(header_name: str):
+    """Return fix metadata for a header name."""
+    if not header_name:
+        return None
+    fixes = _load_header_fixes()
+    return fixes.get(header_name)
+
+
 def _normalize_report(path):
     """Ensure reports have a consistent top-level shape with a `tests` dict.
     Converts legacy single-request reports (which contain `test_config`/`response`)
@@ -354,11 +498,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="HTTPMR WebUI", lifespan=lifespan)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
+# Mount static files
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
 
 # ===== AUTHENTICATION ROUTES =====
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    """Show login page."""
+    """Show login page. Redirect if already authenticated."""
+    user = await _get_user(request)
+    if user:
+        return RedirectResponse(url='/', status_code=303)
     return templates.TemplateResponse('login.html', {"request": request})
 
 
@@ -384,7 +534,10 @@ async def login(request: Request):
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
-    """Show registration page."""
+    """Show registration page. Redirect if already authenticated."""
+    user = await _get_user(request)
+    if user:
+        return RedirectResponse(url='/', status_code=303)
     return templates.TemplateResponse('register.html', {"request": request})
 
 
@@ -429,13 +582,34 @@ async def index(request: Request):
     if not user:
         return RedirectResponse(url='/login', status_code=303)
     
-    files = _list_reports()
-    reports = []
-    for f in sorted(files, reverse=True):
-        path = os.path.join(REPORT_DIR, f)
-        summary = _get_report_summary(path)
-        reports.append({'filename': f, 'summary': summary})
-    return templates.TemplateResponse('dashboard.html', {"request": request, "reports": reports, "username": user["username"]})
+    sort_value = request.query_params.get("sort", DEFAULT_SORT_OPTION["value"])
+    reports, sort_option = _fetch_reports(sort_value)
+
+    context = {
+        "request": request,
+        "reports": reports,
+        "username": user["username"],
+        "sort_options": SORT_OPTIONS,
+        "current_sort": sort_option["value"],
+    }
+    return templates.TemplateResponse('dashboard.html', context)
+
+
+@app.get("/reports_fragment", response_class=HTMLResponse)
+async def reports_fragment(request: Request, sort: str = DEFAULT_SORT_OPTION["value"]):
+    user = await _get_user(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+    
+    reports, sort_option = _fetch_reports(sort)
+    context = {
+        "request": request,
+        "reports": reports,
+        "username": user["username"],
+        "sort_options": SORT_OPTIONS,
+        "current_sort": sort_option["value"],
+    }
+    return templates.TemplateResponse('partials/all_reports.html', context)
 
 
 @app.post("/upload")
@@ -573,8 +747,50 @@ async def view_report(request: Request, name: str):
     with open(path, 'r') as f:
         data = json.load(f)
 
+    tests = data.get('tests', {})
+    cve_fix_map = {}
+    for cve in tests.get('cves', []) or []:
+        cve_id = cve.get('cve') or cve.get('id')
+        if cve_id:
+            cve_fix_map[cve_id] = bool(_get_cve_fix(cve_id))
+
+    security_headers = tests.get('security_headers') or {}
+    header_fix_details = []
+    raw_missing_details = security_headers.get('missing_details') or []
+    if isinstance(raw_missing_details, list) and raw_missing_details:
+        for detail in raw_missing_details:
+            header_name = detail.get('header')
+            message = detail.get('message') or header_name
+            if not header_name:
+                continue
+            header_fix_details.append({
+                "header": header_name,
+                "message": message,
+                "has_fix": bool(_get_header_fix(header_name)),
+            })
+    else:
+        # Backwards compatibility: infer from textual missing entries
+        for missing_msg in security_headers.get('missing') or []:
+            header_name = HEADER_MESSAGE_TO_NAME.get(missing_msg, missing_msg)
+            header_fix_details.append({
+                "header": header_name,
+                "message": missing_msg,
+                "has_fix": bool(_get_header_fix(header_name)),
+            })
+
     summary = _get_report_summary(path)
-    return templates.TemplateResponse('report.html', {"request": request, "report": data, "summary": summary, "report_filename": name, "username": user["username"]})
+    return templates.TemplateResponse(
+        'report.html',
+        {
+            "request": request,
+            "report": data,
+            "summary": summary,
+            "report_filename": name,
+            "username": user["username"],
+            "cve_fix_map": cve_fix_map,
+            "header_fix_details": header_fix_details,
+        },
+    )
 
 
 @app.post('/delete_report')
@@ -691,3 +907,63 @@ async def _run_tester_job(job_id: str, report: str, outpath: str, user_id: int =
     if user_id:
         _save_job_to_db(user_id, job_id, report, outpath, job['history'], 'finished')
         logger.info(f"Tester job {job_id} persisted for user {user_id}")
+
+
+@app.get('/cve_fix/{cve_id}', response_class=HTMLResponse)
+async def cve_fix_page(request: Request, cve_id: str):
+    user = await _get_user(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+
+    fix_data = _get_cve_fix(cve_id)
+    if not fix_data:
+        return templates.TemplateResponse(
+            'cve_fix.html',
+            {
+                "request": request,
+                "cve_id": cve_id.upper(),
+                "fix": None,
+                "username": user["username"],
+            },
+            status_code=404,
+        )
+
+    return templates.TemplateResponse(
+        'cve_fix.html',
+        {
+            "request": request,
+            "cve_id": cve_id.upper(),
+            "fix": fix_data,
+            "username": user["username"],
+        },
+    )
+
+
+@app.get('/header_fix/{header_name}', response_class=HTMLResponse)
+async def header_fix_page(request: Request, header_name: str):
+    user = await _get_user(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+
+    fix_data = _get_header_fix(header_name)
+    if not fix_data:
+        return templates.TemplateResponse(
+            'header_fix.html',
+            {
+                "request": request,
+                "header_name": header_name,
+                "fix": None,
+                "username": user["username"],
+            },
+            status_code=404,
+        )
+
+    return templates.TemplateResponse(
+        'header_fix.html',
+        {
+            "request": request,
+            "header_name": header_name,
+            "fix": fix_data,
+            "username": user["username"],
+        },
+    )

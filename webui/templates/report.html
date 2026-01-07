@@ -4,133 +4,119 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HTTPMR - Report Details</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background:#f6f8fb; color:#0f172a; min-height:100vh; padding:20px; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-        .back-link { display:inline-block; color:#2563eb; text-decoration:none; font-weight:700; }
-        .user-info { display: flex; align-items: center; gap: 12px; }
-        .user-badge { background: #3b82f6; color: white; padding: 6px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
-        .logout-btn { background: #ef4444; color: white; padding: 8px 14px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
-        .card { background:#fff; border-radius:8px; padding:18px; margin-bottom:16px; box-shadow:0 6px 18px rgba(16,24,40,0.04); }
-        h1 { font-size:1.4rem; color:#0f172a; margin-bottom:10px; }
-        h2 { color:#111827; margin-bottom:12px; font-size:1.05rem; border-bottom:1px solid #eef2f7; padding-bottom:8px; }
-        h3 { color: #111827; font-size: 0.95rem; margin-bottom: 8px; }
-        .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
-        .summary-item { background:#f8fafc; color:#0f172a; padding:14px; border-radius:8px; text-align:center; }
-        .summary-label { font-size:0.85rem; color:#475569; margin-bottom:6px; }
-        .summary-value { font-size:1.4rem; font-weight:800; }
-        .score-grade { font-size: 0.9rem; color: #666; margin-top: 4px; }
-        .grade-a { color: #166534; font-weight: 700; }
-        .grade-b { color: #7c2d12; font-weight: 700; }
-        .grade-c { color: #92400e; font-weight: 700; }
-        .grade-d { color: #b45309; font-weight: 700; }
-        .grade-f { color: #b91c1c; font-weight: 700; }
-        table { width:100%; border-collapse:collapse; margin-bottom:12px; }
-        th, td { border:1px solid #eef2f7; padding:12px; text-align:left; }
-        th { background:#fbfdff; font-weight:700; color:#111827; }
-        tr:hover { background:#fbfbfd; }
-        .severity-badge { display:inline-block; padding:6px 10px; border-radius:999px; font-size:0.8rem; font-weight:800; }
-        .severity-high { background:#fff4f4; color:#b91c1c; }
-        .severity-low { background:#f0fdf4; color:#166534; }
-        .vulnerability-item { background:#fff; border-left:4px solid #ef4444; padding:12px; margin-bottom:12px; border-radius:6px; }
-        .vulnerability-title { font-weight:700; color:#0f172a; margin-bottom:8px; }
-        .vulnerability-desc { color:#475569; font-size:0.95rem; margin-bottom:8px; }
-        .button-group { display:flex; gap:10px; margin:14px 0; }
-        button, .btn { padding:10px 16px; border-radius:6px; border:none; font-weight:700; cursor: pointer; }
-        .btn-primary { background:#2563eb; color:#fff; }
-        .btn-danger { background:#ef4444; color:#fff; }
-        .btn-success { background: #16a34a; color: #fff; }
-        .chart-container { position: relative; width: 100%; max-width: 400px; height: 300px; margin: 20px 0; }
-        .headers-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-        ul { margin-left: 20px; }
-        ul li { margin-bottom: 8px; color: #475569; }
-        @media (max-width: 768px) { .headers-row { grid-template-columns: 1fr; } }
-    </style>
+    <!-- HTTPMR Design System -->
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <div class="container">
-        <div class="header-bar">
-            <a href="/" class="back-link">← Back to Dashboard</a>
+        <div class="flex justify-between items-center" style="margin-bottom: var(--space-lg);">
+            <a href="/" class="btn btn-outline btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
             <div class="user-info">
-                <span class="user-badge">👤 {{ username }}</span>
+                <button class="btn btn-secondary btn-sm" style="cursor: default;" disabled>
+                    <i class="fas fa-user"></i> {{ username }}
+                </button>
             </div>
         </div>
         
-        <div class="card">
-            <h1>📊 Report Details</h1>
+        <div class="card" style="margin-bottom: var(--space-xl);">
+            <div class="card-header">
+                <h1 class="card-title"><i class="fas fa-chart-bar"></i> Report Details</h1>
+            </div>
             
-            <div class="summary-grid">
-                <div class="summary-item">
+            <div class="grid grid-auto" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: var(--space-lg);">
+                <div class="card" style="background: var(--bg-secondary); padding: var(--space-lg);">
                     <div class="summary-label">Target</div>
-                    <div class="summary-value" style="font-size: 1.2em; word-break: break-word;">{{ summary.url or 'Unknown' }}</div>
+                    <div class="summary-value" style="font-size: 1.2em; word-break: break-word; color: var(--text-primary);">{{ summary.url or 'Unknown' }}</div>
                 </div>
-                <div class="summary-item">
+                <div class="card" style="background: var(--bg-secondary); padding: var(--space-lg);">
                     <div class="summary-label">Vulnerabilities Found</div>
-                    <div class="summary-value">{{ summary.vuln_count or 0 }}</div>
+                    <div class="summary-value" style="color: var(--text-primary);">{{ summary.vuln_count or 0 }}</div>
                 </div>
-                <div class="summary-item">
+                <div class="card" style="background: var(--bg-secondary); padding: var(--space-lg);">
                     <div class="summary-label">Security Score</div>
-                    <div class="summary-value">{{ summary.security_score or 0 }}/100</div>
+                    <div class="summary-value" style="color: var(--text-primary);">{{ summary.security_score or 0 }}/100</div>
                     <div class="score-grade">
                         {% set score = summary.security_score or 0 %}
                         {% if score >= 90 %}
-                            <span class="grade-a">Grade: A</span>
+                            <span class="badge badge-success">Grade: A</span>
                         {% elif score >= 75 %}
-                            <span class="grade-b">Grade: B</span>
+                            <span class="badge badge-warning">Grade: B</span>
                         {% elif score >= 60 %}
-                            <span class="grade-c">Grade: C</span>
+                            <span class="badge badge-warning">Grade: C</span>
                         {% elif score >= 45 %}
-                            <span class="grade-d">Grade: D</span>
+                            <span class="badge badge-danger">Grade: D</span>
                         {% else %}
-                            <span class="grade-f">Grade: F</span>
+                            <span class="badge badge-danger">Grade: F</span>
                         {% endif %}
                     </div>
                 </div>
-                <div class="summary-item">
+                <div class="card" style="background: var(--bg-secondary); padding: var(--space-lg);">
                     <div class="summary-label">Scan Date</div>
-                    <div class="summary-value" style="font-size: 0.9em;">{{ summary.timestamp or 'N/A' }}</div>
+                    <div class="summary-value" style="font-size: 0.9em; color: var(--text-primary);">{{ summary.timestamp or 'N/A' }}</div>
                 </div>
             </div>
 
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="convertSarif('{{ report_filename }}')">📤 Export to SARIF</button>
-                <button class="btn btn-danger" onclick="deleteReport('{{ report_filename }}')">🗑️ Delete Report</button>
-                <button class="btn btn-success" onclick="runTester('{{ report_filename }}')">🔬 Run Tester</button>
+            <div class="flex gap-md flex-wrap">
+                <button class="btn btn-primary" onclick="convertSarif('{{ report_filename }}')"><i class="fas fa-file-export"></i> Export to SARIF</button>
+                <button class="btn btn-danger" onclick="deleteReport('{{ report_filename }}')"><i class="fas fa-trash"></i> Delete Report</button>
+                <button class="btn btn-success" onclick="runTester('{{ report_filename }}')"><i class="fas fa-flask"></i> Run Tester</button>
             </div>
         </div>
 
         <!-- CVE Findings -->
         {% if report.tests and report.tests.cves %}
-            <div class="card">
-                <h2>🔴 CVE & Vulnerability Findings</h2>
+            <div class="card" style="margin-bottom: var(--space-xl);">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-bug"></i> CVE & Vulnerability Findings</h2>
+                </div>
                 {% set vulns = report.tests.cves | selectattr('vulnerable') | list %}
                 {% if vulns %}
                     {% for cve in vulns %}
-                        <div class="vulnerability-item">
-                            <div class="vulnerability-title">
-                                {{ cve.cve or cve.id or 'Unknown CVE' }}
-                                <span class="severity-badge severity-high">VULNERABLE</span>
+                        {% set cve_id = cve.cve or cve.id %}
+                        <div class="report-card" style="border-left-color: var(--btn-danger); margin-bottom: var(--space-md);">
+                            <div class="flex justify-between items-center" style="gap: var(--space-md);">
+                                <div class="report-title" style="margin: 0;">
+                                    {{ cve_id or 'Unknown CVE' }}
+                                    <span class="badge badge-danger">VULNERABLE</span>
+                                </div>
+                                <div>
+                                    {% if cve_id and cve_fix_map and cve_fix_map.get(cve_id) %}
+                                        <a class="btn btn-outline btn-sm" href="{{ request.url_for('cve_fix_page', cve_id=cve_id) }}">
+                                            <i class="fas fa-wrench"></i> Fix Guide
+                                        </a>
+                                    {% else %}
+                                        <button class="btn btn-secondary btn-sm" style="opacity: 0.6;" disabled title="Detailed fix coming soon">
+                                            <i class="fas fa-hourglass-half"></i> Fix Pending
+                                        </button>
+                                    {% endif %}
+                                </div>
                             </div>
-                            <div class="vulnerability-desc">{{ cve.description or cve.summary or cve.title or 'No description' }}</div>
+                            <div class="vulnerability-desc" style="color: var(--text-secondary);">{{ cve.description or cve.summary or cve.title or 'No description' }}</div>
                             {% if cve.confidence %}
-                                <small style="color: #999;">Confidence: {{ cve.confidence }}</small>
+                                <small style="color: var(--text-muted);">Confidence: {{ cve.confidence }}</small>
                             {% endif %}
                         </div>
                     {% endfor %}
                 {% else %}
-                    <p>No CVEs detected</p>
+                    <p style="color: var(--text-secondary);">No CVEs detected</p>
                 {% endif %}
             </div>
         {% endif %}
 
         <!-- Security Headers Analysis with Pie Chart -->
         {% if report.tests and report.tests.security_headers %}
-            <div class="card">
-                <h2>🛡️ Security Headers Analysis</h2>
+            <div class="card" style="margin-bottom: var(--space-xl);">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-shield-alt"></i> Security Headers Analysis</h2>
+                </div>
                 {% set headers = report.tests.security_headers %}
+                {% set header_details = header_fix_details if header_fix_details is defined else [] %}
                 <div class="headers-row">
                     <div>
                         <div class="summary-grid" style="grid-template-columns: 1fr;">
@@ -212,21 +198,52 @@
                     </div>
                 </div>
 
-                {% if headers.missing %}
-                    <h3 style="margin-top: 20px;">Missing Headers ({{ headers.missing | length }})</h3>
-                    <ul>
-                        {% for missing_header in headers.missing %}
-                            <li>{{ missing_header }}</li>
+                {% set missing_list = header_details if header_details else headers.missing %}
+                {% if missing_list %}
+                    <h3 style="margin-top: 20px;">Missing Headers ({{ missing_list | length }})</h3>
+                    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-md);">
+                        {% for detail in missing_list %}
+                            {% if header_details %}
+                                {% set header_label = detail.header %}
+                                {% set message = detail.message %}
+                                {% set has_fix = detail.has_fix %}
+                            {% else %}
+                                {% set header_label = detail %}
+                                {% set message = detail %}
+                                {% set has_fix = False %}
+                            {% endif %}
+                            <div class="report-card missing-header-card" style="border-left-color: var(--btn-warning);">
+                                <div class="report-title" style="margin-bottom: var(--space-sm); font-size: 1rem;">
+                                    {{ header_label }}
+                                    <span class="badge badge-warning">MISSING</span>
+                                </div>
+                                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: var(--space-sm);">
+                                    {{ message }}
+                                </p>
+                                <div class="fix-actions">
+                                    {% if has_fix %}
+                                        <a class="btn btn-outline btn-sm" href="{{ request.url_for('header_fix_page', header_name=header_label) }}">
+                                            <i class="fas fa-screwdriver-wrench"></i> Fix Guide
+                                        </a>
+                                    {% else %}
+                                        <button class="btn btn-secondary btn-sm" style="opacity: 0.6;" disabled title="Detailed fix coming soon">
+                                            <i class="fas fa-hourglass-half"></i> Fix Pending
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </div>
                         {% endfor %}
-                    </ul>
+                    </div>
                 {% endif %}
             </div>
         {% endif %}
 
         <!-- Server Information -->
         {% if report.tests and report.tests.server_info %}
-            <div class="card">
-                <h2>🖥️ Server Information</h2>
+            <div class="card" style="margin-bottom: var(--space-xl);">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fas fa-server"></i> Server Information</h2>
+                </div>
                 {% set server = report.tests.server_info %}
                 <table>
                     <tr>
@@ -267,7 +284,9 @@
         <!-- WordPress Information -->
         {% if report.tests and report.tests.wordpress %}
             <div class="card">
-                <h2>🔵 WordPress Information</h2>
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fab fa-wordpress"></i> WordPress Information</h2>
+                </div>
                 {% set wp = report.tests.wordpress %}
                 {% if wp.is_wordpress %}
                     <div class="summary-grid" style="grid-template-columns: repeat(2, 1fr);">
@@ -299,7 +318,8 @@
         {% endif %}
     </div>
 
-    <!-- eslint-disable -->
+    <!-- HTTPMR UI JavaScript -->
+    <script src="/static/js/ui.js"></script>
     <script>
         function convertSarif(filename) {
             fetch('/convert_sarif', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'name=' + encodeURIComponent(filename) })

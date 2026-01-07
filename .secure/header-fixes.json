@@ -1,0 +1,198 @@
+{
+  "Strict-Transport-Security": {
+    "title": "HTTP Strict Transport Security (HSTS) Missing",
+    "severity": "HIGH",
+    "summary": "Browsers cannot be instructed to only connect over HTTPS, leaving room for SSL stripping and downgrade attacks.",
+    "why_it_matters": "Attackers performing man-in-the-middle attacks can force clients onto HTTP and intercept authentication cookies or inject content.",
+    "fix_steps": [
+      "Add the Strict-Transport-Security header with a max-age of at least 31536000 seconds (1 year).",
+      "Include the preload directive once the site passes the HSTS preload requirements and submit to hstspreload.org.",
+      "Enable HTTPS redirects at the load balancer or web server so all traffic reaches TLS before the header is evaluated."
+    ],
+    "server_snippets": {
+      "nginx": "add_header Strict-Transport-Security \"max-age=63072000; includeSubDomains; preload\" always;",
+      "apache": "Header always set Strict-Transport-Security \"max-age=63072000; includeSubDomains; preload\""
+    },
+    "code_snippets": {
+      "html": "<meta http-equiv=\"Strict-Transport-Security\" content=\"max-age=63072000; includeSubDomains; preload\">",
+      "php": "<?php\nheader('Strict-Transport-Security: max-age=63072000; includeSubDomains; preload');\nheader('Location: https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], true, 301);\nexit;\n?>",
+      "javascript": "// Express example using helmet\nconst helmet = require('helmet');\nconst express = require('express');\nconst app = express();\n\napp.use(helmet.hsts({\n  maxAge: 63072000,\n  includeSubDomains: true,\n  preload: true\n}));",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function HstsMeta() {\n  return (\n    <Helmet>\n      <meta httpEquiv=\"Strict-Transport-Security\" content=\"max-age=63072000; includeSubDomains; preload\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Run curl -I https://domain and confirm Strict-Transport-Security is present with the expected directives.",
+      "Use securityheaders.com or Observatory by Mozilla to ensure an A grade for HSTS."
+    ],
+    "references": [
+      {"label": "OWASP HSTS Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html"}
+    ]
+  },
+  "Content-Security-Policy": {
+    "title": "Content Security Policy Not Configured",
+    "severity": "HIGH",
+    "summary": "Without CSP, injected scripts or mixed content can execute freely in visitors' browsers.",
+    "why_it_matters": "CSP mitigates XSS and data exfiltration by restricting where scripts, images, and frames can load from.",
+    "fix_steps": [
+      "Start with a report-only CSP to monitor violations before enforcing.",
+      "Define default-src 'self'; and explicitly allow only required domains for script-src, img-src, font-src, etc.",
+      "Use nonces or hashes for inline scripts and remove unsafe-inline or unsafe-eval where possible."
+    ],
+    "server_snippets": {
+      "nginx": "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; frame-ancestors 'none'\" always;",
+      "apache": "Header set Content-Security-Policy \"default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; frame-ancestors 'none'\""
+    },
+    "code_snippets": {
+      "html": "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; frame-ancestors 'none'\">",
+      "php": "<?php\n$csp = \"default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; frame-ancestors 'none'\";\nheader(\"Content-Security-Policy: {$csp}\");\n?>",
+      "javascript": "// Express middleware example\nconst csp = \"default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; frame-ancestors 'none'\";\napp.use((req, res, next) => {\n  res.setHeader('Content-Security-Policy', csp);\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function CspMeta() {\n  return (\n    <Helmet>\n      <meta\n        httpEquiv=\"Content-Security-Policy\"\n        content=\"default-src 'self'; script-src 'self' https://www.gstatic.com; object-src 'none'; frame-ancestors 'none'\"\n      />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Load the site in Chrome DevTools > Security tab and confirm CSP appears with no violations.",
+      "Review CSP violation reports (if report-uri/report-to configured) to ensure only expected origins are listed."
+    ],
+    "references": [
+      {"label": "MDN CSP Guide", "url": "https://developer.mozilla.org/docs/Web/HTTP/CSP"}
+    ]
+  },
+  "X-Content-Type-Options": {
+    "title": "X-Content-Type-Options Missing",
+    "severity": "MEDIUM",
+    "summary": "Browsers may MIME-sniff file types and execute malicious payloads served with incorrect Content-Type headers.",
+    "why_it_matters": "Attackers can upload or reflect files that browsers treat as executable even if marked as text/plain.",
+    "fix_steps": [
+      "Add X-Content-Type-Options: nosniff to every HTTP response.",
+      "Ensure the application sets accurate Content-Type headers for downloads and API responses.",
+      "Block user-uploaded files from being served directly without sanitizing or storing on separate domain."
+    ],
+    "server_snippets": {
+      "nginx": "add_header X-Content-Type-Options \"nosniff\" always;",
+      "apache": "Header set X-Content-Type-Options \"nosniff\""
+    },
+    "code_snippets": {
+      "html": "<meta http-equiv=\"X-Content-Type-Options\" content=\"nosniff\">",
+      "php": "<?php\nheader('X-Content-Type-Options: nosniff');\n?>",
+      "javascript": "app.use((req, res, next) => {\n  res.setHeader('X-Content-Type-Options', 'nosniff');\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function NosniffMeta() {\n  return (\n    <Helmet>\n      <meta httpEquiv=\"X-Content-Type-Options\" content=\"nosniff\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "curl -I https://domain | grep X-Content-Type-Options should show 'nosniff'.",
+      "Use securityheaders.com scorecard to confirm header is detected."
+    ],
+    "references": [
+      {"label": "MDN X-Content-Type-Options", "url": "https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Content-Type-Options"}
+    ]
+  },
+  "X-Frame-Options": {
+    "title": "X-Frame-Options Missing",
+    "severity": "MEDIUM",
+    "summary": "Clickjacking attacks can embed your site in hidden iframes and trick users into executing actions.",
+    "why_it_matters": "Sensitive workflows (checkout, admin panels) can be hijacked through transparent overlays when XFO is absent.",
+    "fix_steps": [
+      "Set X-Frame-Options to SAMEORIGIN if the site only needs to load itself in frames.",
+      "Use DENY for maximum protection when no framing is required.",
+      "If legitimate framing is needed, configure Content-Security-Policy frame-ancestors to a precise allowlist instead of ALLOW-FROM wildcards."
+    ],
+    "server_snippets": {
+      "nginx": "add_header X-Frame-Options \"SAMEORIGIN\" always;",
+      "apache": "Header always set X-Frame-Options \"SAMEORIGIN\""
+    },
+    "code_snippets": {
+      "html": "<meta http-equiv=\"X-Frame-Options\" content=\"SAMEORIGIN\">",
+      "php": "<?php\nheader('X-Frame-Options: SAMEORIGIN');\n?>",
+      "javascript": "app.use((req, res, next) => {\n  res.setHeader('X-Frame-Options', 'SAMEORIGIN');\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function FrameGuardMeta() {\n  return (\n    <Helmet>\n      <meta httpEquiv=\"X-Frame-Options\" content=\"SAMEORIGIN\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Visit https://clickjacker.io, input your URL, and ensure framing attempts fail.",
+      "Inspect response headers in browser dev tools for X-Frame-Options."
+    ],
+    "references": [
+      {"label": "OWASP Clickjacking Defense", "url": "https://cheatsheetseries.owasp.org/cheatsheets/Clickjacking_Defense_Cheat_Sheet.html"}
+    ]
+  },
+  "X-XSS-Protection": {
+    "title": "Legacy X-XSS-Protection Disabled",
+    "severity": "LOW",
+    "summary": "Although modern browsers rely on CSP, legacy clients benefit from opt-in XSS filters via X-XSS-Protection.",
+    "why_it_matters": "Older WebKit/Trident browsers might not block reflective XSS payloads unless this header is enabled.",
+    "fix_steps": [
+      "Set X-XSS-Protection: 1; mode=block to instruct supportive browsers to halt rendering when XSS is detected.",
+      "Prefer CSP for modern defenses but keep this header for backwards compatibility.",
+      "Audit application code to remove inline scripts and adopt framework output encoding."
+    ],
+    "server_snippets": {
+      "nginx": "add_header X-XSS-Protection \"1; mode=block\" always;",
+      "apache": "Header set X-XSS-Protection \"1; mode=block\""
+    },
+    "code_snippets": {
+      "html": "<meta http-equiv=\"X-XSS-Protection\" content=\"1; mode=block\">",
+      "php": "<?php\nheader('X-XSS-Protection: 1; mode=block');\n?>",
+      "javascript": "app.use((req, res, next) => {\n  res.setHeader('X-XSS-Protection', '1; mode=block');\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function LegacyXssMeta() {\n  return (\n    <Helmet>\n      <meta httpEquiv=\"X-XSS-Protection\" content=\"1; mode=block\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Use an older Edge/IE VM to confirm reflective payloads are blocked and browser console logs enforcement.",
+      "Securityheaders.com should report X-XSS-Protection as present."
+    ],
+    "references": [
+      {"label": "MDN X-XSS-Protection", "url": "https://developer.mozilla.org/docs/Web/HTTP/Headers/X-XSS-Protection"}
+    ]
+  },
+  "Permissions-Policy": {
+    "title": "Permissions Policy Not Defined",
+    "severity": "MEDIUM",
+    "summary": "Without Permissions-Policy, every embedded frame can access features like camera, microphone, or geolocation by default.",
+    "why_it_matters": "Restricting powerful features prevents malicious third-party content from abusing device sensors.",
+    "fix_steps": [
+      "Determine which features (camera, geolocation, fullscreen, payment) the site actually requires.",
+      "Set Permissions-Policy (formerly Feature-Policy) to '()' for features not needed, and 'self' or specific origins for those allowed.",
+      "Review embedded third-party widgets and explicitly grant minimal privileges."
+    ],
+    "server_snippets": {
+      "nginx": "add_header Permissions-Policy \"camera=(), microphone=(), geolocation=('self')\" always;",
+      "apache": "Header set Permissions-Policy \"camera=(), microphone=(), geolocation=('self')\""
+    },
+    "code_snippets": {
+      "html": "<meta http-equiv=\"Permissions-Policy\" content=\"camera=(), microphone=(), geolocation=('self')\">",
+      "php": "<?php\nheader(\"Permissions-Policy: camera=(), microphone=(), geolocation=('self')\");\n?>",
+      "javascript": "const policy = \"camera=(), microphone=(), geolocation=('self')\";\napp.use((req, res, next) => {\n  res.setHeader('Permissions-Policy', policy);\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function PermissionsMeta() {\n  return (\n    <Helmet>\n      <meta httpEquiv=\"Permissions-Policy\" content=\"camera=(), microphone=(), geolocation('self')\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Open Chrome DevTools > Application > Permissions Policy to confirm directives load as expected.",
+      "Use Observatory by Mozilla to ensure the header is parsed correctly."
+    ],
+    "references": [
+      {"label": "MDN Permissions Policy", "url": "https://developer.mozilla.org/docs/Web/HTTP/Permissions_Policy"}
+    ]
+  },
+  "Referrer-Policy": {
+    "title": "Referrer Policy Missing",
+    "severity": "LOW",
+    "summary": "Browsers may leak full URLs (including query params/tokens) when users follow outbound links.",
+    "why_it_matters": "Sensitive identifiers in query strings can appear in third-party analytics, logs, or referer headers.",
+    "fix_steps": [
+      "Set Referrer-Policy to strict-origin-when-cross-origin for balanced privacy and analytics accuracy.",
+      "Use no-referrer for applications passing access tokens or PII in query parameters.",
+      "Verify marketing tooling continues to receive required attribution data after tightening policy."
+    ],
+    "server_snippets": {
+      "nginx": "add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;",
+      "apache": "Header set Referrer-Policy \"strict-origin-when-cross-origin\""
+    },
+    "code_snippets": {
+      "html": "<meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">\n<meta http-equiv=\"Referrer-Policy\" content=\"strict-origin-when-cross-origin\">",
+      "php": "<?php\nheader('Referrer-Policy: strict-origin-when-cross-origin');\n?>",
+      "javascript": "app.use((req, res, next) => {\n  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');\n  next();\n});",
+      "react": "import { Helmet } from 'react-helmet';\n\nexport function ReferrerMeta() {\n  return (\n    <Helmet>\n      <meta name=\"referrer\" content=\"strict-origin-when-cross-origin\" />\n      <meta httpEquiv=\"Referrer-Policy\" content=\"strict-origin-when-cross-origin\" />\n    </Helmet>\n  );\n}"
+    },
+    "verification": [
+      "Use Chrome DevTools Network panel to inspect request headers and ensure Referer aligns with policy.",
+      "Run curl -I and confirm Referrer-Policy header is returned."
+    ],
+    "references": [
+      {"label": "MDN Referrer Policy", "url": "https://developer.mozilla.org/docs/Web/HTTP/Headers/Referrer-Policy"}
+    ]
+  }
+}
