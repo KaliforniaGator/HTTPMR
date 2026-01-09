@@ -3,3 +3,5 @@ reports/
 .secure/httpmr.db
 .secure/seetings.config.backup
 __pycache__
+cves/
+cves/*

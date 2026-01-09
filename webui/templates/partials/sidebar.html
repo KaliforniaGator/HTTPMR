@@ -1,0 +1,17 @@
+<aside class="tool-sidebar">
+    <nav class="tool-nav">
+        <button class="sidebar-toggle" type="button" aria-label="Toggle toolkit" data-sidebar-toggle>
+            <i class="fas fa-bars"></i>
+        </button>
+        <p class="tool-section">Secure Workbench</p>
+        <a href="/" class="tool-link {% if request.url.path == '/' %}active{% endif %}">
+            <i class="fas fa-gauge"></i>
+            Dashboard
+        </a>
+        <a href="/cves" class="tool-link {% if request.url.path.startswith('/cves') %}active{% endif %}">
+            <i class="fas fa-bug"></i>
+            CVE Explorer
+        </a>
+    </nav>
+</aside>
+<div class="sidebar-backdrop"></div>

@@ -1,14 +1,12 @@
-import requests
+import os
+import sys
 import json
 import time
 import re
 import socket
 from urllib.parse import urlencode
-import json
-import time
+
 import requests
-import os
-import sys
 
 # optional SARIF exporter integration
 try:
@@ -22,10 +20,24 @@ try:
     SETTINGS_AVAILABLE = True
 except ImportError:
     SETTINGS_AVAILABLE = False
-    def enhance_cve_with_external_apis(cve_data): return cve_data
-    def is_real_time_scans_enabled(): return False
 
-# Color codes for terminal output
+    def enhance_cve_with_external_apis(cve_data):
+        return cve_data
+
+    def is_real_time_scans_enabled():
+        return False
+
+# Paths & configuration
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SECURE_DIR = os.path.join(BASE_DIR, ".secure")
+BUILTIN_CVE_CONFIG_PATH = os.path.join(SECURE_DIR, "built-in-cves.config")
+_CVE_CONFIG_CACHE = []
+_CVE_CONFIG_MTIME = 0.0
+
+# -----------------------------
+# Terminal helpers
+# -----------------------------
+
 class Color:
     RESET = '\033[0m'
     RED = '\033[91m'
@@ -37,8 +49,236 @@ class Color:
     BOLD = '\033[1m'
     DIM = '\033[2m'
 
+
 def colorize(text, color):
     return f"{color}{text}{Color.RESET}"
+
+
+def load_builtin_cve_definitions():
+    """Load CVE definitions from .secure/built-in-cves.config with caching."""
+    global _CVE_CONFIG_CACHE, _CVE_CONFIG_MTIME
+
+    try:
+        mtime = os.path.getmtime(BUILTIN_CVE_CONFIG_PATH)
+    except OSError:
+        if not _CVE_CONFIG_CACHE:
+            print(colorize("[!] built-in CVE config not found. No WordPress CVEs will be tested.", Color.YELLOW))
+        return _CVE_CONFIG_CACHE
+
+    if not _CVE_CONFIG_CACHE or mtime != _CVE_CONFIG_MTIME:
+        try:
+            with open(BUILTIN_CVE_CONFIG_PATH, "r") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                _CVE_CONFIG_CACHE = data
+                _CVE_CONFIG_MTIME = mtime
+            else:
+                print(colorize("[!] built-in CVE config is not a list. Skipping load.", Color.RED))
+        except json.JSONDecodeError as exc:
+            print(colorize(f"[!] Unable to parse built-in CVE config: {exc}", Color.RED))
+        except Exception as exc:
+            print(colorize(f"[!] Unexpected error loading CVE config: {exc}", Color.RED))
+    return _CVE_CONFIG_CACHE
+
+
+def _filter_cve_definitions(platform=None, selected_ids=None):
+    """Filter loaded CVE definitions by platform or explicit IDs."""
+    definitions = load_builtin_cve_definitions()
+    selected_set = {sid.upper() for sid in selected_ids} if selected_ids else None
+    filtered = []
+
+    for definition in definitions:
+        cve_id = (definition.get("id") or "").upper()
+
+        if platform and definition.get("platform") != platform:
+            continue
+        if selected_set and cve_id not in selected_set:
+            continue
+        if not cve_id:
+            continue
+        filtered.append(definition)
+
+    return filtered
+
+
+def _ensure_url_scheme(url):
+    if not url.startswith(("http://", "https://")):
+        return "https://" + url
+    return url
+
+
+def _build_cve_request_url(base_url, request_cfg):
+    base = _ensure_url_scheme(base_url).rstrip("/")
+    path = request_cfg.get("path", "").strip()
+    if path and not path.startswith("/"):
+        path = "/" + path
+    return f"{base}{path}"
+
+
+def _parse_json_response(resp):
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def _evaluate_checks(defn, resp, parsed_json):
+    """Evaluate configured checks against the HTTP response."""
+    checks = defn.get("checks", [])
+    if not checks:
+        return True, "No checks specified; defaulting to pass."
+
+    logic = (defn.get("checks_logic") or "all").lower()
+    results = []
+    lower_body = (resp.text or "").lower()
+
+    for check in checks:
+        ctype = check.get("type")
+        values = check.get("values") or []
+        outcome = False
+        evidence = None
+
+        if ctype == "status_code_in":
+            outcome = resp.status_code in values
+            evidence = f"status_code={resp.status_code}"
+        elif ctype == "status_code_not_in":
+            outcome = resp.status_code not in values
+            evidence = f"status_code={resp.status_code}"
+        elif ctype == "body_contains_any":
+            matches = [val for val in values if val.lower() in lower_body]
+            outcome = bool(matches)
+            if matches:
+                evidence = f"matched={matches[0]}"
+        elif ctype == "json_array_min_length":
+            target_len = check.get("value", 1)
+            if isinstance(parsed_json, list):
+                outcome = len(parsed_json) >= target_len
+                evidence = f"json_len={len(parsed_json)}"
+            else:
+                outcome = False
+                evidence = "json_not_array"
+        else:
+            evidence = f"Unsupported check type {ctype}"
+
+        results.append({"passed": outcome, "evidence": evidence})
+
+    if logic == "any":
+        passed = any(r["passed"] for r in results)
+    else:  # default to 'all'
+        passed = all(r["passed"] for r in results)
+
+    return passed, results
+
+
+def _run_version_handler(url, definition):
+    """Special handler for version disclosure detection."""
+    result = {
+        "cve": definition.get("id"),
+        "title": definition.get("title"),
+        "description": definition.get("description"),
+        "mitre": definition.get("mitre", []),
+        "vulnerable": False
+    }
+    feed_url = _ensure_url_scheme(url).rstrip("/") + "/?feed=rss2"
+    try:
+        resp = requests.get(feed_url, timeout=10, allow_redirects=True)
+        version_match = re.search(r'<generator>https://wordpress.org/\?v=([0-9.]+)</generator>', resp.text)
+        if version_match:
+            version = version_match.group(1)
+            result.update({
+                "vulnerable": "detected",
+                "version": version,
+                "confidence": definition.get("success", {}).get("confidence", 100),
+                "description": definition.get("success", {}).get("message", "Version detected via RSS feed")
+            })
+        else:
+            result.update({
+                "vulnerable": False,
+                "confidence": definition.get("failure", {}).get("confidence", 20),
+                "description": definition.get("failure", {}).get("message", "Version not observed in RSS feed")
+            })
+    except Exception as exc:
+        result.update({
+            "vulnerable": False,
+            "confidence": 0,
+            "error": str(exc)
+        })
+    return result
+
+
+def _execute_cve_definition(url, definition):
+    """Execute a single CVE definition against the target."""
+    result = {
+        "cve": definition.get("id"),
+        "title": definition.get("title"),
+        "description": definition.get("description"),
+        "mitre": definition.get("mitre", []),
+        "vulnerable": False
+    }
+
+    if not definition.get("enabled", True):
+        result.update({"vulnerable": False, "description": "CVE check disabled in config"})
+        return result
+
+    handler = definition.get("handler")
+    if handler:
+        if handler == "wordpress_version_feed":
+            return _run_version_handler(url, definition)
+        result.update({"error": f"Unknown handler '{handler}'"})
+        return result
+
+    request_cfg = definition.get("request") or {}
+    target_url = _build_cve_request_url(url, request_cfg)
+    method = request_cfg.get("method", "GET").upper()
+    timeout = request_cfg.get("timeout", 10)
+    query = request_cfg.get("query")
+    headers = request_cfg.get("headers")
+
+    try:
+        resp = requests.request(
+            method=method,
+            url=target_url,
+            params=query if method == "GET" else None,
+            json=request_cfg.get("json") if method != "GET" else None,
+            data=request_cfg.get("data") if method != "GET" else None,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=True
+        )
+        parsed_json = _parse_json_response(resp)
+        passed, check_evidence = _evaluate_checks(definition, resp, parsed_json)
+
+        evidence_summary = check_evidence if isinstance(check_evidence, list) else [{"info": check_evidence}]
+        success_cfg = definition.get("success", {})
+        failure_cfg = definition.get("failure", {})
+
+        if passed:
+            result.update({
+                "vulnerable": True,
+                "confidence": success_cfg.get("confidence", 80),
+                "description": success_cfg.get("message", "Checks passed"),
+                "evidence": evidence_summary,
+                "response_snippet": resp.text[:200]
+            })
+        else:
+            result.update({
+                "vulnerable": False,
+                "confidence": failure_cfg.get("confidence", 20),
+                "description": failure_cfg.get("message", "Checks failed"),
+                "evidence": evidence_summary,
+                "response_snippet": resp.text[:200]
+            })
+    except Exception as exc:
+        failure_cfg = definition.get("failure") or {}
+        result.update({
+            "vulnerable": False,
+            "confidence": 0,
+            "description": failure_cfg.get("message", "Request failed"),
+            "error": str(exc)
+        })
+
+    return result
+
 
 # -----------------------------
 # Preset payloads
@@ -143,22 +383,31 @@ def display_wordpress_menu():
     return prompt("\nSelect option", "1")
 
 def display_cve_menu():
-    """Display CVE selection menu."""
-    cves = {
-        "1": ("CVE-2024-28133", "oEmbed Directory Traversal"),
-        "2": ("CVE-2024-25157", "Unauthenticated User Enumeration"),
-        "3": ("CVE-2021-24499", "Plugin Install CSRF"),
-        "4": ("CVE-2024-21888", "Stored XSS in Block Theme"),
-        "5": ("XML-RPC-ENABLED", "XML-RPC Attack Vector"),
-        "6": ("All CVEs", "Run all tests"),
-        "7": ("Back", "Return to menu")
-    }
-    
+    """Display dynamic CVE selection menu from config."""
+    definitions = _filter_cve_definitions(platform="wordpress")
+    if not definitions:
+        print(colorize("\n[!] No built-in CVE definitions available.", Color.RED))
+        prompt("Press Enter to continue")
+        return "7"
+
     print(f"\n{Color.BOLD}{Color.MAGENTA}Select WordPress CVEs to Test:{Color.RESET}\n")
-    for key, (cve, desc) in cves.items():
-        print(f"{key}. {cve} - {desc}")
-    
-    return prompt("\nSelect CVE", "6")
+
+    index_map = {}
+    for idx, definition in enumerate(definitions, 1):
+        print(f"{idx}. {definition.get('id', 'UNKNOWN')} - {definition.get('title', 'No description')}")
+        index_map[str(idx)] = definition.get('id')
+
+    all_option = str(len(definitions) + 1)
+    back_option = str(len(definitions) + 2)
+    print(f"{all_option}. Run ALL configured CVEs")
+    print(f"{back_option}. Back to menu")
+
+    choice = prompt("\nSelect option", all_option)
+    if choice == back_option:
+        return "BACK"
+    if choice == all_option:
+        return "ALL"
+    return index_map.get(choice)
 
 def display_payload_builder_menu():
     """Display payload builder options."""
@@ -724,103 +973,43 @@ def detect_wordpress(url):
     except Exception as e:
         return None
 
-def test_wordpress_cves(url, verbose=False):
-    """Test WordPress CVEs from 2025 and recent years."""
-    cve_results = []
-    
+def test_wordpress_cves(url, verbose=False, selected_ids=None):
+    """Run configured WordPress CVE tests defined in built-in-cves.config."""
+    definitions = _filter_cve_definitions(platform="wordpress", selected_ids=selected_ids)
+    if not definitions:
+        if verbose:
+            print(colorize("[WP-CVE] No CVE definitions available to test.", Color.YELLOW))
+        return []
+
+    target_url = _ensure_url_scheme(url)
+    results = []
+
     if verbose:
-        print(f"\n{Color.CYAN}[WP-CVE] Starting WordPress CVE tests...{Color.RESET}")
-    
-    # Ensure URL has scheme
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    
-    # CVE-2025-0001 - WordPress Core SQL Injection (2025)
-    try:
-        # Test for potential SQL injection in WordPress core
-        test_url = url + "/wp-admin/admin-ajax.php?action=sample_test"
-        resp = requests.get(test_url, timeout=10)
-        if "mysql" in resp.text.lower() or "sql" in resp.text.lower():
-            cve_results.append({"cve": "CVE-2025-0001", "vulnerable": True, "description": "WordPress Heartbeat API - Potential SQL injection detected"})
-        else:
-            cve_results.append({"cve": "CVE-2025-0001", "vulnerable": False, "description": "WordPress Heartbeat API - Check for improper input validation"})
-    except Exception:
-        cve_results.append({"cve": "CVE-2025-0001", "vulnerable": False, "description": "WordPress Heartbeat API - Check for improper input validation"})
+        print(f"\n{Color.CYAN}[WP-CVE] Running {len(definitions)} configured CVE checks...{Color.RESET}")
 
-    # CVE-2024-28133 - WordPress Plugin Directory Traversal
-    try:
-        test_url = url + "/wp-json/oembed/1.0/proxy?url=../../../wp-config.php"
-        resp = requests.get(test_url, timeout=10)
-        if resp.status_code == 200 and ("DB_PASSWORD" in resp.text or "DB_HOST" in resp.text):
-            cve_results.append({"cve": "CVE-2024-28133", "vulnerable": True, "description": "Directory Traversal via oEmbed proxy"})
-        else:
-            cve_results.append({"cve": "CVE-2024-28133", "vulnerable": False, "description": "Directory Traversal via oEmbed proxy"})
-    except Exception as e:
-        cve_results.append({"cve": "CVE-2024-28133", "vulnerable": False, "error": str(e)})
+    for definition in definitions:
+        cve_id = definition.get("id", "UNKNOWN")
+        if verbose:
+            print(f"{Color.DIM}  -> {cve_id}: {definition.get('title', 'Untitled check')}{Color.RESET}")
 
-    # CVE-2024-25157 - WordPress Unauthenticated Options Update
-    try:
-        test_url = url + "/wp-json/wp/v2/users"
-        resp = requests.get(test_url, timeout=10)
-        if resp.status_code == 200 and "slug" in resp.text:
-            cve_results.append({"cve": "CVE-2024-25157", "vulnerable": True, "description": "Unauthenticated user enumeration via REST API"})
-        else:
-            cve_results.append({"cve": "CVE-2024-25157", "vulnerable": False, "description": "REST API user access restricted"})
-    except Exception as e:
-        cve_results.append({"cve": "CVE-2024-25157", "vulnerable": False, "error": str(e)})
+        result = _execute_cve_definition(target_url, definition)
+        results.append(result)
 
-    # CVE-2021-24499 - Plugin Install/Activate CSRF
-    try:
-        test_url = url + "/wp-admin/plugin-install.php"
-        resp = requests.get(test_url, timeout=10)
-        if resp.status_code != 302:  # If not redirecting to login
-            cve_results.append({"cve": "CVE-2021-24499", "vulnerable": True, "description": "Plugin install page accessible without auth (CSRF risk)"})
-        else:
-            cve_results.append({"cve": "CVE-2021-24499", "vulnerable": False, "description": "Plugin install redirects (likely protected)"})
-    except Exception as e:
-        cve_results.append({"cve": "CVE-2021-24499", "vulnerable": False, "error": str(e)})
+        if verbose:
+            if result.get("vulnerable") is True:
+                status = colorize("VULNERABLE", Color.RED)
+            elif result.get("vulnerable") == "detected":
+                status = colorize("DETECTED", Color.MAGENTA)
+            else:
+                status = colorize("SAFE", Color.GREEN)
+            print(f"       {status} - {result.get('description', 'No details available')}")
 
-    # CVE-2024-21888 - Stored XSS in Block Theme
-    try:
-        test_url = url + "/?p=1"  # Test a sample page
-        resp = requests.get(test_url, timeout=10)
-        if "<script>" in resp.text and "alert" in resp.text:
-            cve_results.append({"cve": "CVE-2024-21888", "vulnerable": True, "description": "Potential XSS in page content (unescaped scripts found)"})
-        else:
-            cve_results.append({"cve": "CVE-2024-21888", "vulnerable": False, "description": "Page content appears properly escaped"})
-    except Exception as e:
-        cve_results.append({"cve": "CVE-2024-21888", "vulnerable": False, "error": str(e)})
-
-    # XML-RPC Enabled (often exploited)
-    try:
-        test_url = url + "/xmlrpc.php"
-        resp = requests.get(test_url, timeout=10)
-        if "XML-RPC server accepts POST requests only" in resp.text:
-            cve_results.append({"cve": "XML-RPC-ENABLED", "vulnerable": True, "description": "XML-RPC enabled (brute force and amplification attacks possible)"})
-        else:
-            cve_results.append({"cve": "XML-RPC-ENABLED", "vulnerable": False, "description": "XML-RPC not detected or disabled"})
-    except Exception as e:
-        cve_results.append({"cve": "XML-RPC-ENABLED", "vulnerable": False, "error": str(e)})
-
-    # WordPress Version Detection for known vulnerabilities
-    try:
-        test_url = url + "/?feed=rss2"
-        resp = requests.get(test_url, timeout=10)
-        version_match = re.search(r'<generator>https://wordpress.org/\?v=([0-9.]+)</generator>', resp.text)
-        if version_match:
-            version = version_match.group(1)
-            cve_results.append({"cve": "VERSION-DETECTION", "vulnerable": "detected", "version": version, "description": f"WordPress version {version} detected"})
-    except Exception:
-        pass
-
-    # Enhance CVE results with external API data
     if SETTINGS_AVAILABLE:
         enhanced_results = []
-        for cve_result in cve_results:
+        for cve_result in results:
             enhanced = enhance_cve_with_external_apis(cve_result)
             enhanced_results.append(enhanced)
-            
-            # Show external API data in verbose mode
+
             if verbose and enhanced.get('external_data', {}).get('has_external_data'):
                 external = enhanced['external_data']
                 print(f"  {Color.CYAN}[API DATA] Enhanced {cve_result.get('cve')} with external sources:{Color.RESET}")
@@ -830,10 +1019,9 @@ def test_wordpress_cves(url, verbose=False):
                     print(f"    ExploitDB: {external['exploitdb']['count']} exploits found")
                 if external.get('vulndb'):
                     print(f"    VulnDB: {external['vulndb'].get('severity', 'N/A')} severity")
-        
-        cve_results = enhanced_results
+        results = enhanced_results
 
-    return cve_results
+    return results
 
 def summarize_response(resp, elapsed, payload_params, verbose=False, show_full=False, wordpress_data=None):
     if show_full:
@@ -1186,44 +1374,47 @@ def main():
                 elif wp_choice == "2":
                     # Select specific CVEs
                     while True:
-                        cve_choice = display_cve_menu()
+                        selection = display_cve_menu()
                         
-                        if cve_choice == "7":
+                        if selection in ("BACK", None):
                             break
                         
-                        if cve_choice == "6":
-                            print(f"\n{Color.CYAN}Running all CVE tests...{Color.RESET}")
+                        if selection == "ALL":
+                            print(f"\n{Color.CYAN}Running all configured CVE tests...{Color.RESET}")
                             cve_results = test_wordpress_cves(url, verbose=verbose)
                         else:
-                            # Run specific CVE (implement as needed)
-                            print(colorize("Specific CVE testing coming soon", Color.YELLOW))
+                            print(f"\n{Color.CYAN}Running {selection} test...{Color.RESET}")
+                            cve_results = test_wordpress_cves(url, verbose=verbose, selected_ids=[selection])
                         
-                        if 'cve_results' in locals():
-                            print(f"\n{Color.BOLD}{Color.MAGENTA}CVE TEST RESULTS:{Color.RESET}")
-                            for cve in cve_results:
-                                if cve.get("vulnerable") is True:
-                                    icon = colorize("⚠️  VULNERABLE:", Color.RED)
-                                elif cve.get("vulnerable") is False:
-                                    icon = colorize("✓ SAFE:", Color.GREEN)
-                                else:
-                                    icon = colorize("ℹ️  INFO:", Color.BLUE)
-                                cve_name = cve.get('cve', 'UNKNOWN')
-                                cve_desc = cve.get('description', 'No description available')
-                                print(f"{icon} {cve_name} - {cve_desc}")
+                        if not cve_results:
+                            print(colorize("No CVE results returned.", Color.YELLOW))
+                            continue
+                        
+                        print(f"\n{Color.BOLD}{Color.MAGENTA}CVE TEST RESULTS:{Color.RESET}")
+                        for cve in cve_results:
+                            if cve.get("vulnerable") is True:
+                                icon = colorize("⚠️  VULNERABLE:", Color.RED)
+                            elif cve.get("vulnerable") is False:
+                                icon = colorize("✓ SAFE:", Color.GREEN)
+                            else:
+                                icon = colorize("ℹ️  INFO:", Color.BLUE)
+                            cve_name = cve.get('cve', 'UNKNOWN')
+                            cve_desc = cve.get('description', 'No description available')
+                            print(f"{icon} {cve_name} - {cve_desc}")
                 
                 elif wp_choice == "3":
-                    # Version detection only
+                    # Version detection only via config handler
                     print(f"\n{Color.CYAN}[*] Detecting WordPress version...{Color.RESET}")
-                    try:
-                        resp = requests.get(url if url.startswith(("http://", "https://")) else f"https://{url}", timeout=5)
-                        version_match = re.search(r'WordPress ([\d.]+)', resp.text)
-                        if version_match:
-                            version = version_match.group(1)
-                            print(colorize(f"✓ WordPress version detected: {version}", Color.GREEN))
-                        else:
-                            print(colorize("✗ Could not detect WordPress version", Color.YELLOW))
-                    except Exception as e:
-                        print(colorize(f"✗ Error: {e}", Color.RED))
+                    version_results = test_wordpress_cves(url, verbose=verbose, selected_ids=["VERSION-DETECTION"])
+                    if version_results:
+                        for item in version_results:
+                            status = item.get("vulnerable")
+                            if status == "detected":
+                                print(colorize(f"✓ WordPress version detected: {item.get('version', 'unknown')}", Color.GREEN))
+                            else:
+                                print(colorize("✗ Could not detect WordPress version", Color.YELLOW))
+                    else:
+                        print(colorize("✗ Version detection definition not available", Color.YELLOW))
                 
                 elif wp_choice == "4":
                     break

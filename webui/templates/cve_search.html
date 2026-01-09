@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTTPMR – CVE Explorer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+    {% include 'partials/sidebar.html' %}
+    <main class="app-main">
+        <div class="container">
+            <button class="sidebar-toggle-main" type="button" aria-label="Open toolkit" data-sidebar-toggle-main>
+                <i class="fas fa-bars"></i>
+            </button>
+    <header class="dashboard-header" style="margin-bottom: var(--space-xl);">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1><i class="fas fa-bug"></i> CVE Explorer</h1>
+                <p class="subtitle">Fuzzy search and deep dive HTTPMR CVE dataset</p>
+            </div>
+            <div class="flex gap-md items-center">
+                <a class="btn btn-secondary btn-sm" href="/">
+                    <i class="fas fa-gauge"></i> Back to Dashboard
+                </a>
+                <a href="/settings" class="btn btn-outline btn-sm">
+                    <i class="fas fa-user"></i> {{ username }}
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <section class="card" style="margin-bottom: var(--space-xl);">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title"><i class="fas fa-search"></i> Search CVEs</h2>
+        </div>
+        <form method="get" action="/cves" class="flex gap-md" style="flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1 1 320px;">
+                <label for="query">CVE ID, keyword, or partial match</label>
+                <input type="text" id="query" name="query" placeholder="CVE-2024-12345 or wordpress" value="{{ query }}" />
+            </div>
+            <div class="form-group" style="width: 140px;">
+                <label>&nbsp;</label>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Search</button>
+            </div>
+        </form>
+        {% if search_results %}
+        <div class="search-results" style="margin-top: var(--space-lg);">
+            <div class="flex justify-between items-center">
+                <h3>{{ search_results.count }} match{{ 'es' if search_results.count != 1 else '' }}</h3>
+                <button class="btn btn-outline btn-sm" type="button" onclick="document.getElementById('query').value='';document.getElementById('query').focus();">Clear</button>
+            </div>
+            <div class="list" style="margin-top: var(--space-md);">
+                {% for entry in search_results.results %}
+                <a class="list-item" href="/cves/{{ entry.id }}?query={{ query | urlencode }}">
+                    <div>
+                        <div class="list-title">{{ entry.id }}</div>
+                        <div class="list-subtitle">{{ entry.timestamp }} · {{ entry.kind|title }}</div>
+                    </div>
+                    <div class="badges">
+                        <span class="badge badge-dark">{{ entry.year }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% elif query %}
+        <div class="empty-state" style="margin-top: var(--space-lg);">
+            <i class="fas fa-circle-question"></i>
+            <p>No CVEs matched "{{ query }}"</p>
+        </div>
+        {% endif %}
+    </section>
+
+    <section>
+        <div class="flex justify-between items-center" style="margin-bottom: var(--space-md);">
+            <h2><i class="fas fa-calendar"></i> Catalog by Year</h2>
+            <p class="subtitle">Latest fetches appear first · select a CVE for full detail</p>
+        </div>
+        <div class="year-grid">
+            {% for bucket in year_buckets %}
+            <div class="card year-panel">
+                <div class="card-header flex justify-between items-center">
+                    <h3 class="card-title">{{ bucket.year }}</h3>
+                    <span class="badge badge-dark">{{ bucket.count }}</span>
+                </div>
+                {% if bucket.entries %}
+                <div class="year-list">
+                    {% for entry in bucket.entries %}
+                    <a class="year-item" href="/cves/{{ entry.id }}?query={{ query | urlencode }}">
+                        <div>
+                            <div class="list-title">{{ entry.id }}</div>
+                            <div class="list-subtitle">{{ entry.timestamp }}</div>
+                        </div>
+                        <span class="badge badge-outline">{{ entry.kind }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <p>No entries recorded for {{ bucket.year }}</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+        </div>
+    </main>
+</div>
+
+<style>
+    .year-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--space-lg);
+    }
+    .year-panel {
+        min-height: 220px;
+    }
+    .year-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        max-height: 360px;
+        overflow-y: auto;
+    }
+    .year-item {
+        border: 1px solid var(--border); 
+        border-radius: var(--radius-md);
+        padding: var(--space-md);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .year-item:hover {
+        border-color: var(--primary);
+        transform: translateY(-1px);
+    }
+    .list-item {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-md);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-sm);
+        text-decoration: none;
+        color: inherit;
+    }
+    .list-title {
+        font-weight: 600;
+    }
+    .list-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+</style>
+<script src="/static/js/sidebar.js"></script>
+</body>
+</html>

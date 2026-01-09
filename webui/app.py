@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -16,13 +16,20 @@ import secrets
 import logging
 import requests
 from datetime import datetime
+from typing import Optional, Tuple, List
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 try:
     import nvdlib
     NVD_AVAILABLE = True
 except ImportError:
     NVD_AVAILABLE = False
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+from cve_search import CVELibrary, CVEEntry
+
 REPORT_DIR = os.path.join(BASE_DIR, "reports")
 DB_PATH = os.path.join(BASE_DIR, ".secure", "httpmr.db")
 CVE_FIXES_PATH = os.path.join(BASE_DIR, ".secure", "cves-fixes.json")
@@ -46,6 +53,7 @@ _CVE_FIXES_CACHE = {}
 _CVE_FIXES_MTIME = 0.0
 _HEADER_FIXES_CACHE = {}
 _HEADER_FIXES_MTIME = 0.0
+CVE_LIBRARY = CVELibrary()
 
 HEADER_MESSAGE_TO_NAME = {
     "HSTS not configured": "Strict-Transport-Security",
@@ -398,6 +406,122 @@ def _get_header_fix(header_name: str):
     return fixes.get(header_name)
 
 
+def _serialize_cve_entry(entry: Optional[CVEEntry]) -> Optional[dict]:
+    if not entry:
+        return None
+    iso_dt = entry.iso_date()
+    return {
+        "id": entry.cve_id,
+        "year": entry.year,
+        "kind": entry.kind,
+        "github_link": entry.github_link,
+        "org_link": entry.org_link,
+        "date_updated": entry.date_updated,
+        "timestamp": iso_dt.strftime("%Y-%m-%d %H:%M:%S") if iso_dt != datetime.min else "Unknown",
+    }
+
+
+def _list_year_summaries(limit_per_year: int | None = None):
+    years = CVE_LIBRARY.list_years()
+    summaries = []
+    for year in years:
+        entries_all = CVE_LIBRARY.list_entries_by_year(year)
+        entries = entries_all if limit_per_year is None else entries_all[:limit_per_year]
+        summaries.append({
+            "year": year,
+            "count": len(entries_all),
+            "entries": [_serialize_cve_entry(e) for e in entries]
+        })
+    return summaries
+
+
+def _load_cve_detail(cve_id: str) -> Tuple[Optional[CVEEntry], Optional[dict]]:
+    if not cve_id:
+        return None, None
+    entry = CVE_LIBRARY.get_entry(cve_id.upper())
+    record = CVE_LIBRARY.get_cve_record(cve_id.upper())
+    return entry, record
+
+
+def _build_cve_search_results(query: str, limit: int = 30) -> dict:
+    matches = CVE_LIBRARY.search(query, limit=limit)
+    return {
+        "query": query,
+        "count": len(matches),
+        "results": [_serialize_cve_entry(entry) for entry in matches],
+    }
+
+
+def _extract_cve_metadata(record: Optional[dict]) -> dict:
+    metadata = {
+        "description": None,
+        "problem_types": [],
+        "references": [],
+        "cvss": [],
+        "affected": [],
+        "published": record.get("datePublished") if record else None,
+        "last_modified": record.get("dateUpdated") if record else None,
+    }
+    if not record:
+        return metadata
+
+    containers = record.get("containers") or {}
+    cna = containers.get("cna") or {}
+    desc_value = None
+    for desc in cna.get("descriptions", []):
+        if not desc_value:
+            desc_value = desc.get("value")
+        if desc.get("lang", "").lower().startswith("en") and desc.get("value"):
+            desc_value = desc["value"]
+            break
+    metadata["description"] = desc_value
+
+    problem_types: List[str] = []
+    for problem in cna.get("problemTypes", []):
+        for desc in problem.get("descriptions", []):
+            text = desc.get("description")
+            if text and text not in problem_types:
+                problem_types.append(text)
+    metadata["problem_types"] = problem_types
+
+    references: List[dict] = []
+    for ref in cna.get("references", []):
+        references.append({
+            "name": ref.get("name"),
+            "url": ref.get("url"),
+            "tags": ref.get("tags") or [],
+        })
+    metadata["references"] = references
+
+    cvss_entries: List[dict] = []
+    for metric in cna.get("metrics", []):
+        for key in ("cvssV3_1", "cvssV3_0", "cvssV2"):
+            if key in metric:
+                data = metric[key]
+                cvss_entries.append({
+                    "version": data.get("version") or key.replace("cvss", "CVSS "),
+                    "base_score": data.get("baseScore"),
+                    "severity": data.get("baseSeverity"),
+                    "vector": data.get("vectorString"),
+                })
+    metadata["cvss"] = cvss_entries
+
+    affected: List[str] = []
+    for vendor in cna.get("affected", []):
+        vendor_name = vendor.get("vendor")
+        for product in vendor.get("products", []):
+            product_name = product.get("product")
+            version_data = product.get("versions", [])
+            versions = ", ".join(v.get("version") for v in version_data if v.get("version"))
+            label = " / ".join(filter(None, [vendor_name, product_name]))
+            if versions:
+                label = f"{label} ({versions})"
+            if label:
+                affected.append(label)
+    metadata["affected"] = affected
+    return metadata
+
+
 def _load_settings():
     """Load settings from secure storage."""
     try:
@@ -735,6 +859,47 @@ async def index(request: Request):
         "current_sort": sort_option["value"],
     }
     return templates.TemplateResponse('dashboard.html', context)
+
+
+@app.get("/cves", response_class=HTMLResponse)
+async def cve_search_view(request: Request, query: str = ""):
+    user = await _get_user(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+
+    years = _list_year_summaries(limit_per_year=12)
+    search_results = _build_cve_search_results(query) if query else None
+    context = {
+        "request": request,
+        "username": user["username"],
+        "query": query,
+        "search_results": search_results,
+        "year_buckets": years,
+    }
+    return templates.TemplateResponse('cve_search.html', context)
+
+
+@app.get("/cves/{cve_id}", response_class=HTMLResponse)
+async def cve_detail_view(request: Request, cve_id: str, query: str = ""):
+    user = await _get_user(request)
+    if not user:
+        return RedirectResponse(url='/login', status_code=303)
+
+    entry, record = _load_cve_detail(cve_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="CVE record not found")
+
+    metadata = _extract_cve_metadata(record)
+    context = {
+        "request": request,
+        "username": user["username"],
+        "entry": _serialize_cve_entry(entry),
+        "record": record,
+        "metadata": metadata,
+        "cve_id": cve_id.upper(),
+        "search_query": query,
+    }
+    return templates.TemplateResponse('cve_detail.html', context)
 
 
 @app.get("/reports_fragment", response_class=HTMLResponse)

@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ cve_id }} · CVE Detail · HTTPMR</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+    {% include 'partials/sidebar.html' %}
+    <main class="app-main">
+        <div class="container">
+            <button class="sidebar-toggle-main" type="button" aria-label="Open toolkit" data-sidebar-toggle-main>
+                <i class="fas fa-bars"></i>
+            </button>
+    <header class="dashboard-header" style="margin-bottom: var(--space-xl);">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1><i class="fas fa-shield"></i> {{ cve_id }}</h1>
+                <p class="subtitle">Deep dive supplied from HTTPMR CVE archive</p>
+            </div>
+            <div class="flex gap-md">
+                <a class="btn btn-secondary btn-sm" href="/cves{% if search_query %}?query={{ search_query | urlencode }}{% endif %}">
+                    <i class="fas fa-arrow-left"></i> Back to CVE Explorer
+                </a>
+                <a class="btn btn-outline btn-sm" href="/">
+                    <i class="fas fa-gauge"></i> Dashboard
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <section{% if metadata.affected %} class="grid grid-cols-2"{% endif %} style="gap: var(--space-xl);">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title"><i class="fas fa-info-circle"></i> Overview</h2>
+            </div>
+            <div class="card-body">
+                <dl class="meta-grid">
+                    <div>
+                        <dt>Published</dt>
+                        <dd>{{ metadata.published or 'Unknown' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Last Updated</dt>
+                        <dd>{{ metadata.last_modified or 'Unknown' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Record Kind</dt>
+                        <dd>{{ entry.kind if entry else 'N/A' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Year</dt>
+                        <dd>{{ entry.year if entry else cve_id.split('-')[1] }}</dd>
+                    </div>
+                </dl>
+                {% if metadata.description %}
+                <p class="lead">{{ metadata.description }}</p>
+                {% else %}
+                <p class="text-muted">No formal description found in the CNA container.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if metadata.affected %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title"><i class="fas fa-chart-gantt"></i> Affected Products</h2>
+            </div>
+            <ul class="tag-list">
+                {% for product in metadata.affected %}
+                <li>{{ product }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="card" style="margin-top: var(--space-xl);">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title"><i class="fas fa-radiation"></i> CVSS Metrics</h2>
+        </div>
+        {% if metadata.cvss %}
+        <div class="cvss-grid">
+            {% for metric in metadata.cvss %}
+            <div class="cvss-card">
+                {% if metric.base_score %}
+                <div class="cvss-gauge-container">
+                    <canvas id="cvssGauge{{ loop.index }}" width="120" height="120"></canvas>
+                    <div class="cvss-gauge-center">
+                        <div class="cvss-gauge-score">{{ metric.base_score }}</div>
+                        <div class="cvss-gauge-label">{{ metric.severity or 'Unknown' }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="cvss-score">—</div>
+                {% endif %}
+                <div class="cvss-meta">
+                    <span>{{ metric.version }}</span>
+                    <small>{{ metric.vector }}</small>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No CVSS scoring provided.</p>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="card" style="margin-top: var(--space-xl);">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title"><i class="fas fa-code-branch"></i> Problem Types</h2>
+        </div>
+        {% if metadata.problem_types %}
+        <ul class="tag-list">
+            {% for item in metadata.problem_types %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="empty-state">
+            <p>No CWE/problem types documented.</p>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="card" style="margin-top: var(--space-xl);">
+        <div class="card-header">
+            <h2 class="card-title"><i class="fas fa-link"></i> References</h2>
+        </div>
+        {% if metadata.references %}
+        <div class="references">
+            {% for ref in metadata.references %}
+            <a class="reference" href="{{ ref.url }}" target="_blank" rel="noopener noreferrer">
+                <div>
+                    <div class="list-title">{{ ref.name or ref.url }}</div>
+                    <div class="list-subtitle">{{ ref.url }}</div>
+                </div>
+                {% if ref.tags %}
+                <div class="badges">
+                    {% for tag in ref.tags %}<span class="badge badge-outline">{{ tag }}</span>{% endfor %}
+                </div>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No references recorded.</p>
+        </div>
+        {% endif %}
+    </section>
+        </div>
+    </main>
+</div>
+
+<script src="/static/js/sidebar.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function drawCVSSGauge(canvasId, score) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = 45;
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Background arc
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, Math.PI * 0.75, Math.PI * 2.25, false);
+        ctx.lineWidth = 12;
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.stroke();
+        
+        // Determine color based on score
+        let color;
+        if (score <= 3.0) {
+            color = '#16a34a'; // Green
+        } else if (score <= 6.0) {
+            color = '#f59e0b'; // Yellow/Orange
+        } else if (score <= 8.0) {
+            color = '#ef4444'; // Red
+        } else {
+            color = '#8b0000'; // Dark Red
+        }
+        
+        // Score arc (3/4 circle, from 135° to 405°)
+        const startAngle = Math.PI * 0.75;
+        const endAngle = startAngle + (Math.PI * 1.5 * (score / 10.0));
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
+        ctx.lineWidth = 12;
+        ctx.strokeStyle = color;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        
+        // Add tick marks
+        ctx.strokeStyle = '#9ca3af';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 10; i++) {
+            const angle = Math.PI * 0.75 + (Math.PI * 1.5 * i / 10);
+            const innerRadius = radius - 8;
+            const outerRadius = radius - 4;
+            
+            ctx.beginPath();
+            ctx.moveTo(
+                centerX + Math.cos(angle) * innerRadius,
+                centerY + Math.sin(angle) * innerRadius
+            );
+            ctx.lineTo(
+                centerX + Math.cos(angle) * outerRadius,
+                centerY + Math.sin(angle) * outerRadius
+            );
+            ctx.stroke();
+        }
+    }
+    
+    // Draw gauges for each CVSS metric
+    const cvssData = JSON.parse('{{ metadata.cvss | tojson | safe }}');
+    
+    cvssData.forEach((metric, index) => {
+        if (metric.base_score && metric.base_score > 0) {
+            drawCVSSGauge('cvssGauge' + (index + 1), metric.base_score);
+        }
+    });
+});
+</script>
+<style>
+    .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: var(--space-md);
+    }
+    .meta-grid dt {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+    }
+    .meta-grid dd {
+        margin: 0;
+        font-weight: 600;
+    }
+    .tag-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+        padding: var(--space-md);
+        list-style: none;
+    }
+    .tag-list li {
+        background: var(--surface-alt);
+        padding: 0.4rem 0.8rem;
+        border-radius: var(--radius-full);
+        font-size: 0.9rem;
+    }
+    .cvss-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: var(--space-md);
+        padding: var(--space-md);
+    }
+    .cvss-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-md);
+        display: flex;
+        gap: var(--space-md);
+        align-items: center;
+    }
+    .cvss-score {
+        font-size: 2.4rem;
+        font-weight: 700;
+    }
+    .cvss-meta span {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    .cvss-meta strong {
+        display: block;
+        margin: 0.2rem 0;
+        font-size: 1.1rem;
+    }
+    .references {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        padding: var(--space-md);
+    }
+    .reference {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-md);
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    .lead {
+        font-size: 1.05rem;
+        margin-top: var(--space-md);
+    }
+    .cvss-gauge-container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: var(--space-sm) 0;
+    }
+    .cvss-gauge-center {
+        position: absolute;
+        text-align: center;
+        pointer-events: none;
+    }
+    .cvss-gauge-score {
+        font-size: 1.8rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .cvss-gauge-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-top: 2px;
+        opacity: 0.8;
+    }
+</style>
+</body>
+</html>
