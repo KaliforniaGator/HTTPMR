@@ -9,7 +9,19 @@ This repository contains HTTPMR — a lightweight HTTP reconnaissance, vulnerabi
 - **Web UI:** `webui/` — FastAPI app with a dashboard, live-run view (WebSocket streaming), report viewer, SARIF conversion, and the ability to run the `Tester` from a report.
 - **SARIF export:** `sarif_exporter.py` — converts HTTPMR JSON reports into SARIF 2.1.0 compatible output (minimal rules & results).
 
+**Available Scan Types**
+- **Auto (Full Scan)** — Comprehensive security test including all checks below
+- **WordPress Only** — WordPress detection and CVE vulnerability testing
+- **Joomla Only** — Joomla detection and vulnerability testing  
+- **WooCommerce Only** — WooCommerce plugin detection and CVE testing
+- **Laravel Only** — Laravel framework detection and vulnerability testing
+- **PHP Only** — PHP application detection and vulnerability testing
+- **Security Headers Only** — Analysis of security headers implementation
+- **Server Detection Only** — Server fingerprinting and port scanning
+- **Stealth Mode (Passive)** — Passive reconnaissance without active probing
+
 **Notable helpers**
+- `update.sh` — update HTTPMR to the latest version from GitHub (creates backup, handles dependencies).
 - `run_webui.sh` — create a `.venv`, install dependencies from `requirements.txt`, and start the Web UI (uvicorn). Use this for a quick start.
 - `clean_pycache.sh` — remove Python bytecode caches and test artifacts.
 
@@ -39,17 +51,41 @@ pip install -r requirements.txt
 .venv/bin/uvicorn webui.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-2. **For CVE data (optional but recommended):** Download actual CVE data from https://www.cve.org/downloads, download the `main.zip` file, and extract its contents into a `cves` folder in the HTTPMR directory.
+2. **Update HTTPMR:** To update to the latest version from GitHub:
 
-3. Open the dashboard at `http://127.0.0.1:8000/`.
+```bash
+./update.sh
+```
 
-4. Start a scan from the dashboard (enter a host like `example.com`), view live colored logs on the run page, and view the generated report when finished.
+This will fetch the latest code, create a backup, update dependencies if needed, and preserve any local changes by stashing them.
+
+3. **For CVE data (optional but recommended):** Download actual CVE data from https://www.cve.org/downloads, download the `main.zip` file, and extract its contents into a `cves` folder in the HTTPMR directory.
+
+4. Open the dashboard at `http://127.0.0.1:8000/`.
+
+5. Start a scan from the dashboard (enter a host like `example.com`), view live colored logs on the run page, and view the generated report when finished.
 
 CLI examples
 - Run an Auto Mode scan and save JSON:
 
 ```bash
 python HTTPMR.py --auto --target example.com -o scan_example.json
+```
+
+- Run a specific scan mode:
+
+```bash
+# WordPress-only scan
+python HTTPMR.py --auto --target example.com --mode wordpress -o wordpress_scan.json
+
+# Security headers analysis
+python HTTPMR.py --auto --target example.com --mode headers -o headers_scan.json
+
+# Stealth mode (passive)
+python HTTPMR.py --auto --target example.com --mode stealth -o stealth_scan.json
+
+# Server detection only
+python HTTPMR.py --auto --target example.com --mode server -o server_scan.json
 ```
 
 - Read a JSON report with the CLI reader:
