@@ -30,9 +30,16 @@ except ImportError:
 # Paths & configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SECURE_DIR = os.path.join(BASE_DIR, ".secure")
+CVE_DIR = os.path.join(BASE_DIR, "cves")
+REPORTS_DIR = os.path.join(BASE_DIR, "reports")
 BUILTIN_CVE_CONFIG_PATH = os.path.join(SECURE_DIR, "built-in-cves.config")
 _CVE_CONFIG_CACHE = []
 _CVE_CONFIG_MTIME = 0.0
+
+# Ensure required directories exist
+os.makedirs(SECURE_DIR, exist_ok=True)
+os.makedirs(CVE_DIR, exist_ok=True)
+os.makedirs(REPORTS_DIR, exist_ok=True)
 
 # -----------------------------
 # Terminal helpers
@@ -586,9 +593,8 @@ def save_json_report(output_file, url, method, payload_params, resp, elapsed, wo
     
     # Ensure output file is in reports directory
     if not os.path.dirname(output_file):
-        reports_dir = os.path.join(os.path.dirname(__file__), "reports")
-        os.makedirs(reports_dir, exist_ok=True)
-        output_file = os.path.join(reports_dir, output_file)
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        output_file = os.path.join(REPORTS_DIR, output_file)
     
     report = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1986,9 +1992,8 @@ def save_scan_report(auto_results, output_file):
     try:
         # Ensure output file is in reports directory
         if not os.path.dirname(output_file):
-            reports_dir = os.path.join(os.path.dirname(__file__), "reports")
-            os.makedirs(reports_dir, exist_ok=True)
-            output_file = os.path.join(reports_dir, output_file)
+            os.makedirs(REPORTS_DIR, exist_ok=True)
+            output_file = os.path.join(REPORTS_DIR, output_file)
         
         with open(output_file, 'w') as f:
             json.dump(auto_results, f, indent=2)
@@ -2123,9 +2128,8 @@ def main():
                             try:
                                 # Ensure output file is in reports directory
                                 if not os.path.dirname(output_file):
-                                    reports_dir = os.path.join(os.path.dirname(__file__), "reports")
-                                    os.makedirs(reports_dir, exist_ok=True)
-                                    output_file = os.path.join(reports_dir, output_file)
+                                    os.makedirs(REPORTS_DIR, exist_ok=True)
+                                    output_file = os.path.join(REPORTS_DIR, output_file)
                                 
                                 report_data = {
                                     "wordpress_info": wordpress_data,

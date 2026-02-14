@@ -24,7 +24,9 @@ def scan_cve_directory() -> Dict[str, List[str]]:
     print(f"Scanning CVE directory: {CVE_ROOT}")
     
     if not CVE_ROOT.exists():
-        print(f"CVE directory not found: {CVE_ROOT}")
+        print(f"CVE directory not found, creating: {CVE_ROOT}")
+        CVE_ROOT.mkdir(parents=True, exist_ok=True)
+        print(f"Created empty CVE directory: {CVE_ROOT}")
         return {}
     
     year_to_cves: Dict[str, List[str]] = {}

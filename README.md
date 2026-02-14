@@ -39,9 +39,11 @@ pip install -r requirements.txt
 .venv/bin/uvicorn webui.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-2. Open the dashboard at `http://127.0.0.1:8000/`.
+2. **For CVE data (optional but recommended):** Download actual CVE data from https://www.cve.org/downloads, download the `main.zip` file, and extract its contents into a `cves` folder in the HTTPMR directory.
 
-3. Start a scan from the dashboard (enter a host like `example.com`), view live colored logs on the run page, and view the generated report when finished.
+3. Open the dashboard at `http://127.0.0.1:8000/`.
+
+4. Start a scan from the dashboard (enter a host like `example.com`), view live colored logs on the run page, and view the generated report when finished.
 
 CLI examples
 - Run an Auto Mode scan and save JSON:

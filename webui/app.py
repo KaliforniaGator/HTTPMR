@@ -37,6 +37,10 @@ HEADER_FIXES_PATH = os.path.join(BASE_DIR, ".secure", "header-fixes.json")
 SETTINGS_PATH = os.path.join(BASE_DIR, ".secure", "settings.config")
 SESSION_TIMEOUT = 24 * 60 * 60  # 24 hours
 
+# Ensure required directories exist
+os.makedirs(REPORT_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
