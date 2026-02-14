@@ -10,34 +10,64 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <a href="/" class="btn btn-outline btn-sm" style="margin-bottom: var(--space-md);">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
-            </a>
-            
-            <div class="card-header">
-                <h1 class="card-title"><i class="fas fa-search"></i> Running Scan</h1>
-                <div class="target-info">Target: <strong>{{ target }}</strong></div>
-                <div class="output-file"><i class="fas fa-folder"></i> {{ outpath }}</div>
-            </div>
+    <div class="app-shell">
+        {% include 'partials/sidebar.html' %}
+        <main class="app-main">
+            <div class="container">
+                <button class="sidebar-toggle-main" type="button" aria-label="Open toolkit" data-sidebar-toggle-main>
+                    <i class="fas fa-bars"></i>
+                </button>
+                
+                <header class="dashboard-header">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h1><i class="fas fa-search"></i> Running Scan</h1>
+                            <p class="subtitle">HTTP & Web Vulnerability Assessment Tool</p>
+                        </div>
+                        <div class="user-info">
+                            <a href="/" class="btn btn-outline btn-sm">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </header>
 
-            <div id="status" class="status status-running">
-                <span class="spinner"></span> Scan in progress...
-            </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h2 class="card-title"><i class="fas fa-rocket"></i> Scan Progress</h2>
+                                <div class="target-info">Target: <strong>{{ target }}</strong></div>
+                                <div class="output-file"><i class="fas fa-folder"></i> {{ outpath }}</div>
+                            </div>
+                            <div id="status" class="status status-running">
+                                <span class="spinner"></span> Scan in progress...
+                            </div>
+                        </div>
+                    </div>
 
-            <div class="flex gap-md">
-                <button id="downloadBtn" class="btn btn-primary" disabled><i class="fas fa-download"></i> Download Report</button>
-                <button id="viewBtn" class="btn btn-primary" disabled><i class="fas fa-eye"></i> View Report</button>
-            </div>
+                    <div class="form-actions">
+                        <button id="downloadBtn" class="btn btn-primary" disabled><i class="fas fa-download"></i> Download Report</button>
+                        <button id="viewBtn" class="btn btn-primary" disabled><i class="fas fa-eye"></i> View Report</button>
+                    </div>
 
-            <div id="log" class="log-output">Connecting to stream...</div>
-        </div>
+                    <div class="log-section">
+                        <h3><i class="fas fa-terminal"></i> Scan Output</h3>
+                        <div id="log" class="log-output">
+                            <div class="progress-indicator">
+                                <div class="ascii-progress">⠋ Initializing scan...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
     <!-- ANSI Up Library -->
     <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.0.0/ansi_up.min.js"></script>
     <!-- HTTPMR UI JavaScript -->
+    <script src="/static/js/sidebar.js"></script>
     <script src="/static/js/ui.js"></script>
     <script>
         const jobId = "{{ job_id }}";
@@ -49,9 +79,49 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const viewBtn = document.getElementById('viewBtn');
         const statusDiv = document.getElementById('status');
+        const backBtn = document.querySelector('a[href="/"]');
         
         let logContent = [];
         const ansi_up = new AnsiUp();
+        let progressInterval;
+        let progressFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        let currentFrame = 0;
+
+        // Disable all buttons when scan starts
+        function disableButtons() {
+            downloadBtn.disabled = true;
+            viewBtn.disabled = true;
+            backBtn.classList.add('disabled');
+            backBtn.style.pointerEvents = 'none';
+            backBtn.style.opacity = '0.5';
+        }
+
+        // Enable all buttons when scan finishes
+        function enableButtons() {
+            downloadBtn.disabled = false;
+            viewBtn.disabled = false;
+            backBtn.classList.remove('disabled');
+            backBtn.style.pointerEvents = '';
+            backBtn.style.opacity = '';
+        }
+
+        // ASCII progress animation
+        function startProgressAnimation() {
+            progressInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % progressFrames.length;
+                const progressEl = document.querySelector('.ascii-progress');
+                if (progressEl) {
+                    progressEl.textContent = `${progressFrames[currentFrame]} Scan in progress...`;
+                }
+            }, 100);
+        }
+
+        function stopProgressAnimation() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        }
 
         function escapeHtml(s) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -61,14 +131,52 @@
             // Convert ANSI escapes to HTML while escaping any raw HTML
             const safe = escapeHtml(s);
             const colored = ansi_up.ansi_to_html(safe);
-            logContent.push(colored);
-            log.innerHTML = logContent.join('<br/>');
+            
+            // Check if this is real scan data (not just system messages)
+            const isSystemMessage = s.includes('[connected to job stream]') || s.includes('[stream closed]') || s.includes('[websocket error]');
+            const isJobFinished = s.includes('[JOB_FINISHED]');
+            
+            if (!isSystemMessage && !isJobFinished) {
+                // This is real scan data - stop progress and show scan output
+                if (progressInterval) {
+                    stopProgressAnimation();
+                    // Clear the progress indicator when real data arrives
+                    const progressEl = document.querySelector('.progress-indicator');
+                    if (progressEl) {
+                        progressEl.style.display = 'none';
+                    }
+                }
+                // Add scan data to log
+                if (!logContent.includes(colored)) {
+                    logContent.push(colored);
+                }
+                log.innerHTML = logContent.join('<br/>');
+            } else if (isSystemMessage) {
+                // This is a connection message - add below progress indicator
+                if (!logContent.includes(colored)) {
+                    logContent.push(colored);
+                    // Rebuild the entire log content
+                    const progressEl = document.querySelector('.progress-indicator');
+                    const progressHtml = progressEl && progressEl.style.display !== 'none' ? progressEl.outerHTML : '';
+                    log.innerHTML = progressHtml + '<br/>' + logContent.join('<br/>');
+                }
+            } else if (isJobFinished) {
+                // Job finished - add the message but don't clear progress yet
+                if (!logContent.includes(colored)) {
+                    logContent.push(colored);
+                    log.innerHTML = logContent.join('<br/>');
+                }
+            }
+            
             log.scrollTop = log.scrollHeight;
         }
 
+        // Initialize
+        disableButtons();
+        startProgressAnimation();
+
         ws.onopen = () => {
-            log.innerText = '';
-            logContent = [];
+            // Don't reset logContent, let progress indicator stay visible
             appendLine('[connected to job stream]');
         };
 
@@ -76,6 +184,7 @@
             const text = ev.data;
             appendLine(text);
             if(text.startsWith('[JOB_FINISHED]')) {
+                stopProgressAnimation();
                 const rc = text.includes('rc=0') ? 0 : 1;
                 if(rc === 0) {
                     statusDiv.className = 'status status-finished';
@@ -84,16 +193,21 @@
                     statusDiv.className = 'status status-error';
                     statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Scan completed with errors (rc=' + rc + ')';
                 }
-                downloadBtn.disabled = false;
-                viewBtn.disabled = false;
+                enableButtons();
             }
         };
 
-        ws.onclose = () => appendLine('[stream closed]');
+        ws.onclose = () => {
+            stopProgressAnimation();
+            appendLine('[stream closed]');
+        };
+        
         ws.onerror = (e) => {
+            stopProgressAnimation();
             appendLine('[websocket error]');
             statusDiv.className = 'status status-error';
             statusDiv.innerHTML = '<i class="fas fa-times-circle"></i> Connection error';
+            enableButtons();
         };
 
         downloadBtn.addEventListener('click', () => {

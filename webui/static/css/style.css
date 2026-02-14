@@ -36,6 +36,120 @@
   color: var(--btn-success);
 }
 
+/* Slide Toggle Styling */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text-primary);
+    user-select: none;
+    margin-bottom: var(--space-sm);
+}
+
+.checkbox-label input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 48px;
+    height: 24px;
+    margin-right: var(--space-sm);
+    background: var(--border-color);
+    border-radius: 12px;
+    transition: all var(--transition-fast);
+    border: 2px solid var(--border-color);
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: all var(--transition-fast);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .toggle-switch {
+    background: var(--btn-primary);
+    border-color: var(--btn-primary);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .toggle-switch::after {
+    transform: translateX(24px);
+}
+
+.checkbox-label:hover .toggle-switch {
+    border-color: var(--btn-primary);
+    opacity: 0.8;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .toggle-switch:hover {
+    opacity: 0.9;
+}
+
+/* Run Page Styles */
+.log-section {
+    margin-top: var(--space-lg);
+}
+
+.progress-indicator {
+    text-align: center;
+    padding: var(--space-md);
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+}
+
+.ascii-progress {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--btn-primary);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.status {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 6px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.status-running {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--btn-primary);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.status-finished {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--btn-success);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.status-error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--btn-danger);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn.disabled {
+    pointer-events: none !important;
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+}
+
 /* Global Container and Body Spacing */
 body {
   margin-top: var(--space-xl);

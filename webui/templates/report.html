@@ -75,8 +75,12 @@
                 <div class="card-header">
                     <h2 class="card-title"><i class="fas fa-bug"></i> CVE & Vulnerability Findings</h2>
                 </div>
-                {% set vulns = report.tests.cves | selectattr('vulnerable') | list %}
+                {% set vulns = report.tests.cves | selectattr('vulnerable', 'equalto', true) | list %}
+                {% set safe = report.tests.cves | selectattr('vulnerable', 'equalto', false) | list %}
+                {% set detected = report.tests.cves | selectattr('vulnerable', 'equalto', 'detected') | list %}
+                
                 {% if vulns %}
+                    <h3 style="margin-bottom: var(--space-md); color: var(--btn-danger);">🚨 Vulnerable CVEs</h3>
                     {% for cve in vulns %}
                         {% set cve_id = cve.cve or cve.id %}
                         <div class="report-card" style="border-left-color: var(--btn-danger); margin-bottom: var(--space-md);">
@@ -117,21 +121,7 @@
                                                         <span style="font-weight: 600;">Severity:</span> {{ external.nvd.severity }}
                                                     {% endif %}
                                                     {% if external.nvd.score %}
-                                                        <br><span style="font-weight: 600;">Score:</span> {{ external.nvd.score }} {{ '(' ~ external.nvd.score_version ~ ')' if external.nvd.score_version }}
-                                                    {% endif %}
-                                                    {% if external.nvd.vector %}
-                                                        <br><span style="font-weight: 600;">Vector:</span> {{ external.nvd.vector }}
-                                                    {% endif %}
-                                                    {% if external.nvd.published %}
-                                                        <br><span style="font-weight: 600;">Published:</span> {{ external.nvd.published }}
-                                                    {% endif %}
-                                                    {% if external.nvd.references %}
-                                                        <br><span style="font-weight: 600;">References:</span>
-                                                        <ul style="margin: 0.5rem 0 0 1rem;">
-                                                            {% for ref in external.nvd.references[:3] %}
-                                                                <li style="line-height: 1.4;"><a href="{{ ref }}" target="_blank">{{ ref }}</a></li>
-                                                            {% endfor %}
-                                                        </ul>
+                                                        <span style="font-weight: 600;">Score:</span> {{ external.nvd.score }}
                                                     {% endif %}
                                                 </p>
                                             </div>
@@ -140,23 +130,17 @@
                                         {% if external.exploitdb %}
                                             <div class="card" style="background: var(--bg-secondary); border-left: 3px solid var(--btn-warning);">
                                                 <div class="flex items-center gap-sm" style="margin-bottom: var(--space-sm);">
-                                                    <i class="fas fa-code"></i>
+                                                    <i class="fas fa-bomb"></i>
                                                     <strong>ExploitDB</strong>
                                                 </div>
                                                 <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
-                                                    {% if external.exploitdb.count %}
-                                                        <span style="font-weight: 600;">Exploits:</span> {{ external.exploitdb.count }}
-                                                    {% endif %}
-                                                    {% if external.exploitdb.exploits %}
-                                                        <br><span style="font-weight: 600;">Latest Exploit:</span>
-                                                        <span>{{ external.exploitdb.exploits[0].description or external.exploitdb.exploits[0].title }}</span>
-                                                    {% endif %}
+                                                    <span style="font-weight: 600;">Exploits:</span> {{ external.exploitdb.count }} available
                                                 </p>
                                             </div>
                                         {% endif %}
                                         
                                         {% if external.vulndb %}
-                                            <div class="card" style="background: var(--bg-secondary); border-left: 3px solid var(--btn-success);">
+                                            <div class="card" style="background: var(--bg-secondary); border-left: 3px solid var(--btn-info);">
                                                 <div class="flex items-center gap-sm" style="margin-bottom: var(--space-sm);">
                                                     <i class="fas fa-exclamation-triangle"></i>
                                                     <strong>VulnDB</strong>

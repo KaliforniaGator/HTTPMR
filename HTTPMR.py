@@ -973,7 +973,220 @@ def detect_wordpress(url):
     except Exception as e:
         return None
 
-def test_wordpress_cves(url, verbose=False, selected_ids=None):
+
+def detect_joomla(url):
+    """Detect if the site is running Joomla."""
+    joomla_indicators = {
+        "administrator": False,
+        "joomla_version": None,
+        "joomla_generator": False,
+        "com_content": False,
+        "media_joomla": False,
+        "is_joomla": False,
+        "detection_method": []
+    }
+    
+    try:
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        
+        # Check for Joomla administrator panel
+        try:
+            admin_resp = requests.get(f"{url}/administrator/", timeout=5, allow_redirects=True)
+            if admin_resp.status_code == 200 and "joomla" in admin_resp.text.lower():
+                joomla_indicators["administrator"] = True
+                joomla_indicators["detection_method"].append("administrator-panel")
+        except:
+            pass
+        
+        # Check homepage for Joomla indicators
+        try:
+            resp = requests.get(url, timeout=5, allow_redirects=True)
+            html = resp.text.lower()
+            
+            # Check for Joomla meta generator
+            if "joomla" in html and "generator" in html:
+                joomla_indicators["joomla_generator"] = True
+                joomla_indicators["detection_method"].append("meta-generator")
+            
+            # Check for Joomla paths
+            if "/media/jui/" in html or "/media/system/" in html:
+                joomla_indicators["media_joomla"] = True
+                joomla_indicators["detection_method"].append("media-paths")
+            
+            # Check for com_content
+            if "com_content" in html:
+                joomla_indicators["com_content"] = True
+                joomla_indicators["detection_method"].append("com-content")
+            
+            # Determine if Joomla
+            if len(joomla_indicators["detection_method"]) >= 1:
+                joomla_indicators["is_joomla"] = True
+                
+        except:
+            pass
+        
+        return joomla_indicators
+    except Exception as e:
+        return None
+
+
+def detect_woocommerce(url):
+    """Detect if the site is running WooCommerce (WordPress plugin)."""
+    woo_indicators = {
+        "woocommerce_api": False,
+        "woocommerce_assets": False,
+        "woocommerce_cart": False,
+        "woocommerce_checkout": False,
+        "is_woocommerce": False,
+        "detection_method": []
+    }
+    
+    try:
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        
+        # Check for WooCommerce API endpoints
+        try:
+            api_resp = requests.get(f"{url}/wp-json/wc/v3/", timeout=5, allow_redirects=True)
+            if api_resp.status_code == 200 and "woocommerce" in api_resp.text.lower():
+                woo_indicators["woocommerce_api"] = True
+                woo_indicators["detection_method"].append("wc-api")
+        except:
+            pass
+        
+        # Check homepage for WooCommerce indicators
+        try:
+            resp = requests.get(url, timeout=5, allow_redirects=True)
+            html = resp.text.lower()
+            
+            # Check for WooCommerce assets
+            if "woocommerce" in html and ("assets" in html or "css" in html):
+                woo_indicators["woocommerce_assets"] = True
+                woo_indicators["detection_method"].append("woocommerce-assets")
+            
+            # Check for cart/checkout pages
+            if "/cart/" in html or "/checkout/" in html:
+                woo_indicators["woocommerce_cart"] = True
+                woo_indicators["detection_method"].append("cart-checkout")
+            
+            # Determine if WooCommerce
+            if len(woo_indicators["detection_method"]) >= 1:
+                woo_indicators["is_woocommerce"] = True
+                
+        except:
+            pass
+        
+        return woo_indicators
+    except Exception as e:
+        return None
+
+
+def detect_laravel(url):
+    """Detect if the site is running Laravel."""
+    laravel_indicators = {
+        "laravel_cookie": False,
+        "laravel_routes": False,
+        "laravel_debug": False,
+        "laravel_assets": False,
+        "is_laravel": False,
+        "detection_method": []
+    }
+    
+    try:
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        
+        # Check homepage for Laravel indicators
+        try:
+            resp = requests.get(url, timeout=5, allow_redirects=True)
+            html = resp.text.lower()
+            headers = resp.headers
+            
+            # Check for Laravel session cookie
+            set_cookie = headers.get("set-cookie", "")
+            if "laravel_session" in set_cookie.lower():
+                laravel_indicators["laravel_cookie"] = True
+                laravel_indicators["detection_method"].append("laravel-session")
+            
+            # Check for Laravel debug errors
+            if "whoops" in html or "laravel" in html:
+                laravel_indicators["laravel_debug"] = True
+                laravel_indicators["detection_method"].append("laravel-debug")
+            
+            # Check for Laravel asset patterns
+            if "/storage/" in html or "mix-manifest.json" in html:
+                laravel_indicators["laravel_assets"] = True
+                laravel_indicators["detection_method"].append("laravel-assets")
+            
+            # Determine if Laravel
+            if len(laravel_indicators["detection_method"]) >= 1:
+                laravel_indicators["is_laravel"] = True
+                
+        except:
+            pass
+        
+        return laravel_indicators
+    except Exception as e:
+        return None
+
+
+def detect_php_application(url):
+    """Detect if the site is running a PHP application."""
+    php_indicators = {
+        "php_headers": False,
+        "php_extensions": False,
+        "php_errors": False,
+        "php_session": False,
+        "is_php": False,
+        "detection_method": []
+    }
+    
+    try:
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        
+        # Check homepage for PHP indicators
+        try:
+            resp = requests.get(url, timeout=5, allow_redirects=True)
+            headers = resp.headers
+            html = resp.text.lower()
+            
+            # Check for PHP headers
+            server = headers.get("server", "").lower()
+            x_powered_by = headers.get("x-powered-by", "").lower()
+            if "php" in server or "php" in x_powered_by:
+                php_indicators["php_headers"] = True
+                php_indicators["detection_method"].append("php-headers")
+            
+            # Check for PHP session cookies
+            set_cookie = headers.get("set-cookie", "")
+            if "phpsessid" in set_cookie.lower():
+                php_indicators["php_session"] = True
+                php_indicators["detection_method"].append("php-session")
+            
+            # Check for PHP file extensions in links
+            if ".php" in html:
+                php_indicators["php_extensions"] = True
+                php_indicators["detection_method"].append("php-extensions")
+            
+            # Check for PHP error messages
+            if "php warning" in html or "php fatal error" in html or "php notice" in html:
+                php_indicators["php_errors"] = True
+                php_indicators["detection_method"].append("php-errors")
+            
+            # Determine if PHP
+            if len(php_indicators["detection_method"]) >= 1:
+                php_indicators["is_php"] = True
+                
+        except:
+            pass
+        
+        return php_indicators
+    except Exception as e:
+        return None
+
+def test_wordpress_cves(url, verbose=False, selected_ids=None, use_apis=True):
     """Run configured WordPress CVE tests defined in built-in-cves.config."""
     definitions = _filter_cve_definitions(platform="wordpress", selected_ids=selected_ids)
     if not definitions:
@@ -1004,7 +1217,216 @@ def test_wordpress_cves(url, verbose=False, selected_ids=None):
                 status = colorize("SAFE", Color.GREEN)
             print(f"       {status} - {result.get('description', 'No details available')}")
 
-    if SETTINGS_AVAILABLE:
+    # Only enhance with external APIs if use_apis is True
+    if use_apis and SETTINGS_AVAILABLE:
+        enhanced_results = []
+        for cve_result in results:
+            enhanced = enhance_cve_with_external_apis(cve_result)
+            enhanced_results.append(enhanced)
+
+            if verbose and enhanced.get('external_data', {}).get('has_external_data'):
+                external = enhanced['external_data']
+                print(f"  {Color.CYAN}[API DATA] Enhanced {cve_result.get('cve')} with external sources:{Color.RESET}")
+                if external.get('nvd'):
+                    print(f"    NVD: Score {external['nvd'].get('score', 'N/A')}, Severity {external['nvd'].get('severity', 'N/A')}")
+                if external.get('exploitdb'):
+                    print(f"    ExploitDB: {external['exploitdb']['count']} exploits found")
+                if external.get('vulndb'):
+                    print(f"    VulnDB: {external['vulndb'].get('severity', 'N/A')} severity")
+        results = enhanced_results
+
+    return results
+
+
+def test_php_cves(url, verbose=False, selected_ids=None, use_apis=True):
+    """Run configured PHP CVE tests defined in built-in-cves.config."""
+    definitions = _filter_cve_definitions(platform="php", selected_ids=selected_ids)
+    if not definitions:
+        if verbose:
+            print(colorize("[PHP-CVE] No CVE definitions available to test.", Color.YELLOW))
+        return []
+
+    target_url = _ensure_url_scheme(url)
+    results = []
+
+    if verbose:
+        print(f"\n{Color.CYAN}[PHP-CVE] Running {len(definitions)} configured CVE checks...{Color.RESET}")
+
+    for definition in definitions:
+        cve_id = definition.get("id", "UNKNOWN")
+        if verbose:
+            print(f"{Color.DIM}  -> {cve_id}: {definition.get('title', 'Untitled check')}{Color.RESET}")
+
+        result = _execute_cve_definition(target_url, definition)
+        results.append(result)
+
+        if verbose:
+            if result.get("vulnerable") is True:
+                status = colorize("VULNERABLE", Color.RED)
+            elif result.get("vulnerable") == "detected":
+                status = colorize("DETECTED", Color.MAGENTA)
+            else:
+                status = colorize("SAFE", Color.GREEN)
+            print(f"       {status} - {result.get('description', 'No details available')}")
+
+    # Only enhance with external APIs if use_apis is True
+    if use_apis and SETTINGS_AVAILABLE:
+        enhanced_results = []
+        for cve_result in results:
+            enhanced = enhance_cve_with_external_apis(cve_result)
+            enhanced_results.append(enhanced)
+
+            if verbose and enhanced.get('external_data', {}).get('has_external_data'):
+                external = enhanced['external_data']
+                print(f"  {Color.CYAN}[API DATA] Enhanced {cve_result.get('cve')} with external sources:{Color.RESET}")
+                if external.get('nvd'):
+                    print(f"    NVD: Score {external['nvd'].get('score', 'N/A')}, Severity {external['nvd'].get('severity', 'N/A')}")
+                if external.get('exploitdb'):
+                    print(f"    ExploitDB: {external['exploitdb']['count']} exploits found")
+                if external.get('vulndb'):
+                    print(f"    VulnDB: {external['vulndb'].get('severity', 'N/A')} severity")
+        results = enhanced_results
+
+    return results
+
+
+def test_joomla_cves(url, verbose=False, selected_ids=None, use_apis=True):
+    """Run configured Joomla CVE tests defined in built-in-cves.config."""
+    definitions = _filter_cve_definitions(platform="joomla", selected_ids=selected_ids)
+    if not definitions:
+        if verbose:
+            print(colorize("[JOOMLA-CVE] No CVE definitions available to test.", Color.YELLOW))
+        return []
+
+    target_url = _ensure_url_scheme(url)
+    results = []
+
+    if verbose:
+        print(f"\n{Color.CYAN}[JOOMLA-CVE] Running {len(definitions)} configured CVE checks...{Color.RESET}")
+
+    for definition in definitions:
+        cve_id = definition.get("id", "UNKNOWN")
+        if verbose:
+            print(f"{Color.DIM}  -> {cve_id}: {definition.get('title', 'Untitled check')}{Color.RESET}")
+
+        result = _execute_cve_definition(target_url, definition)
+        results.append(result)
+
+        if verbose:
+            if result.get("vulnerable") is True:
+                status = colorize("VULNERABLE", Color.RED)
+            elif result.get("vulnerable") == "detected":
+                status = colorize("DETECTED", Color.MAGENTA)
+            else:
+                status = colorize("SAFE", Color.GREEN)
+            print(f"       {status} - {result.get('description', 'No details available')}")
+
+    # Only enhance with external APIs if use_apis is True
+    if use_apis and SETTINGS_AVAILABLE:
+        enhanced_results = []
+        for cve_result in results:
+            enhanced = enhance_cve_with_external_apis(cve_result)
+            enhanced_results.append(enhanced)
+
+            if verbose and enhanced.get('external_data', {}).get('has_external_data'):
+                external = enhanced['external_data']
+                print(f"  {Color.CYAN}[API DATA] Enhanced {cve_result.get('cve')} with external sources:{Color.RESET}")
+                if external.get('nvd'):
+                    print(f"    NVD: Score {external['nvd'].get('score', 'N/A')}, Severity {external['nvd'].get('severity', 'N/A')}")
+                if external.get('exploitdb'):
+                    print(f"    ExploitDB: {external['exploitdb']['count']} exploits found")
+                if external.get('vulndb'):
+                    print(f"    VulnDB: {external['vulndb'].get('severity', 'N/A')} severity")
+        results = enhanced_results
+
+    return results
+
+
+def test_woocommerce_cves(url, verbose=False, selected_ids=None, use_apis=True):
+    """Run configured WooCommerce CVE tests defined in built-in-cves.config."""
+    definitions = _filter_cve_definitions(platform="woocommerce", selected_ids=selected_ids)
+    if not definitions:
+        if verbose:
+            print(colorize("[WOO-CVE] No CVE definitions available to test.", Color.YELLOW))
+        return []
+
+    target_url = _ensure_url_scheme(url)
+    results = []
+
+    if verbose:
+        print(f"\n{Color.CYAN}[WOO-CVE] Running {len(definitions)} configured CVE checks...{Color.RESET}")
+
+    for definition in definitions:
+        cve_id = definition.get("id", "UNKNOWN")
+        if verbose:
+            print(f"{Color.DIM}  -> {cve_id}: {definition.get('title', 'Untitled check')}{Color.RESET}")
+
+        result = _execute_cve_definition(target_url, definition)
+        results.append(result)
+
+        if verbose:
+            if result.get("vulnerable") is True:
+                status = colorize("VULNERABLE", Color.RED)
+            elif result.get("vulnerable") == "detected":
+                status = colorize("DETECTED", Color.MAGENTA)
+            else:
+                status = colorize("SAFE", Color.GREEN)
+            print(f"       {status} - {result.get('description', 'No details available')}")
+
+    # Only enhance with external APIs if use_apis is True
+    if use_apis and SETTINGS_AVAILABLE:
+        enhanced_results = []
+        for cve_result in results:
+            enhanced = enhance_cve_with_external_apis(cve_result)
+            enhanced_results.append(enhanced)
+
+            if verbose and enhanced.get('external_data', {}).get('has_external_data'):
+                external = enhanced['external_data']
+                print(f"  {Color.CYAN}[API DATA] Enhanced {cve_result.get('cve')} with external sources:{Color.RESET}")
+                if external.get('nvd'):
+                    print(f"    NVD: Score {external['nvd'].get('score', 'N/A')}, Severity {external['nvd'].get('severity', 'N/A')}")
+                if external.get('exploitdb'):
+                    print(f"    ExploitDB: {external['exploitdb']['count']} exploits found")
+                if external.get('vulndb'):
+                    print(f"    VulnDB: {external['vulndb'].get('severity', 'N/A')} severity")
+        results = enhanced_results
+
+    return results
+
+
+def test_laravel_cves(url, verbose=False, selected_ids=None, use_apis=True):
+    """Run configured Laravel CVE tests defined in built-in-cves.config."""
+    definitions = _filter_cve_definitions(platform="laravel", selected_ids=selected_ids)
+    if not definitions:
+        if verbose:
+            print(colorize("[LARAVEL-CVE] No CVE definitions available to test.", Color.YELLOW))
+        return []
+
+    target_url = _ensure_url_scheme(url)
+    results = []
+
+    if verbose:
+        print(f"\n{Color.CYAN}[LARAVEL-CVE] Running {len(definitions)} configured CVE checks...{Color.RESET}")
+
+    for definition in definitions:
+        cve_id = definition.get("id", "UNKNOWN")
+        if verbose:
+            print(f"{Color.DIM}  -> {cve_id}: {definition.get('title', 'Untitled check')}{Color.RESET}")
+
+        result = _execute_cve_definition(target_url, definition)
+        results.append(result)
+
+        if verbose:
+            if result.get("vulnerable") is True:
+                status = colorize("VULNERABLE", Color.RED)
+            elif result.get("vulnerable") == "detected":
+                status = colorize("DETECTED", Color.MAGENTA)
+            else:
+                status = colorize("SAFE", Color.GREEN)
+            print(f"       {status} - {result.get('description', 'No details available')}")
+
+    # Only enhance with external APIs if use_apis is True
+    if use_apis and SETTINGS_AVAILABLE:
         enhanced_results = []
         for cve_result in results:
             enhanced = enhance_cve_with_external_apis(cve_result)
@@ -1111,15 +1533,32 @@ def summarize_response(resp, elapsed, payload_params, verbose=False, show_full=F
 # Main flow
 # -----------------------------
 
-def auto_mode_test(url, verbose=False, output_file=None):
+def auto_mode_test(url, verbose=False, output_file=None, mode="auto", use_apis=True):
     """Run comprehensive automatic security test on target."""
+    
+    # Set scan title based on mode
+    mode_titles = {
+        "auto": "COMPREHENSIVE SECURITY TEST",
+        "wordpress": "WORDPRESS SECURITY TEST",
+        "joomla": "JOOMLA SECURITY TEST", 
+        "woocommerce": "WOOCOMMERCE SECURITY TEST",
+        "laravel": "LARAVEL SECURITY TEST",
+        "php": "PHP APPLICATION SECURITY TEST",
+        "headers": "SECURITY HEADERS ANALYSIS",
+        "server": "SERVER DETECTION SCAN",
+        "stealth": "STEALTH MODE (PASSIVE SCAN)"
+    }
+    
+    title = mode_titles.get(mode, "SECURITY TEST")
     print(f"\n{Color.BOLD}{Color.CYAN}{'='*60}")
-    print(f"AUTO MODE - COMPREHENSIVE SECURITY TEST")
+    print(f"AUTO MODE - {title}")
     print(f"{'='*60}{Color.RESET}\n")
     
     auto_results = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "url": url,
+        "mode": mode,
+        "use_apis": use_apis,
         "tests": {}
     }
     
@@ -1127,7 +1566,178 @@ def auto_mode_test(url, verbose=False, output_file=None):
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     
-    # 1. WordPress Detection
+    # Mode-specific scanning logic
+    if mode == "headers":
+        run_headers_only_scan(url, verbose, auto_results)
+    elif mode == "server":
+        run_server_only_scan(url, verbose, auto_results)
+    elif mode == "stealth":
+        run_stealth_scan(url, verbose, auto_results)
+    elif mode == "wordpress":
+        run_platform_specific_scan(url, verbose, auto_results, "wordpress", use_apis)
+    elif mode == "joomla":
+        run_platform_specific_scan(url, verbose, auto_results, "joomla", use_apis)
+    elif mode == "woocommerce":
+        run_platform_specific_scan(url, verbose, auto_results, "woocommerce", use_apis)
+    elif mode == "laravel":
+        run_platform_specific_scan(url, verbose, auto_results, "laravel", use_apis)
+    elif mode == "php":
+        run_platform_specific_scan(url, verbose, auto_results, "php", use_apis)
+    else:  # auto mode - comprehensive scan
+        run_comprehensive_scan(url, verbose, auto_results, use_apis)
+    
+    # Generate final summary
+    generate_scan_summary(auto_results, mode)
+    
+    # Save report if requested
+    if output_file:
+        save_scan_report(auto_results, output_file)
+    
+    return auto_results
+
+
+def run_headers_only_scan(url, verbose, auto_results):
+    """Run security headers analysis only."""
+    print(f"{Color.BOLD}[1/1] Security Headers Analysis...{Color.RESET}")
+    headers_analysis = analyze_security_headers(url, verbose=verbose)
+    auto_results["tests"]["security_headers"] = headers_analysis
+    
+    print(f"  Security Score: {headers_analysis['score']}/{headers_analysis['max_score']}")
+    if headers_analysis['missing']:
+        print(f"  Missing Headers: {len(headers_analysis['missing'])}")
+        for missing in headers_analysis['missing'][:3]:
+            print(f"    - {missing}")
+
+
+def run_server_only_scan(url, verbose, auto_results):
+    """Run server detection only."""
+    print(f"{Color.BOLD}[1/1] Server & Port Detection...{Color.RESET}")
+    server_info = detect_server_and_ports(url, verbose=verbose)
+    auto_results["tests"]["server_info"] = server_info
+    
+    print(f"  Server: {server_info['server']}")
+    if server_info['open_ports']:
+        print(f"  Open Ports: {len(server_info['open_ports'])}")
+        for port_info in server_info['open_ports']:
+            print(f"    - {port_info['port']}/{port_info['service']}")
+
+
+def run_stealth_scan(url, verbose, auto_results):
+    """Run passive/stealth scan only."""
+    print(f"{Color.BOLD}[1/1] Passive Information Gathering...{Color.RESET}")
+    
+    # Only do passive detection, no active scanning
+    wordpress_data = detect_wordpress(url)
+    joomla_data = detect_joomla(url)
+    woo_data = detect_woocommerce(url)
+    laravel_data = detect_laravel(url)
+    php_data = detect_php_application(url)
+    server_info = detect_server_and_ports(url, verbose=False)
+    
+    auto_results["tests"]["wordpress"] = wordpress_data
+    auto_results["tests"]["platform_detection"] = {
+        "joomla": joomla_data,
+        "woocommerce": woo_data,
+        "laravel": laravel_data,
+        "php": php_data
+    }
+    auto_results["tests"]["server_info"] = server_info
+    
+    # Show detected platforms (passive detection only)
+    detected_platforms = []
+    if joomla_data and joomla_data.get("is_joomla"):
+        detected_platforms.append("Joomla")
+    if woo_data and woo_data.get("is_woocommerce"):
+        detected_platforms.append("WooCommerce")
+    if laravel_data and laravel_data.get("is_laravel"):
+        detected_platforms.append("Laravel")
+    if php_data and php_data.get("is_php"):
+        detected_platforms.append("PHP")
+    if wordpress_data and wordpress_data.get("is_wordpress"):
+        detected_platforms.append("WordPress")
+    
+    if detected_platforms:
+        print(f"  {Color.GREEN}✓ Detected platforms: {', '.join(detected_platforms)}{Color.RESET}")
+    else:
+        print(f"  {Color.YELLOW}- No specific platforms detected{Color.RESET}")
+    
+    print(f"  Server: {server_info['server']}")
+    print(f"  {Color.DIM}Note: Stealth mode - no active vulnerability testing performed{Color.RESET}")
+
+
+def run_platform_specific_scan(url, verbose, auto_results, platform, use_apis=True):
+    """Run scan for specific platform only."""
+    print(f"{Color.BOLD}[1/2] Platform Detection...{Color.RESET}")
+    
+    # Detect all platforms but focus on the target
+    wordpress_data = detect_wordpress(url) if platform == "wordpress" else {"is_wordpress": False}
+    joomla_data = detect_joomla(url) if platform == "joomla" else {"is_joomla": False}
+    woo_data = detect_woocommerce(url) if platform == "woocommerce" else {"is_woocommerce": False}
+    laravel_data = detect_laravel(url) if platform == "laravel" else {"is_laravel": False}
+    php_data = detect_php_application(url) if platform == "php" else {"is_php": False}
+    
+    auto_results["tests"]["wordpress"] = wordpress_data
+    auto_results["tests"]["platform_detection"] = {
+        "joomla": joomla_data,
+        "woocommerce": woo_data,
+        "laravel": laravel_data,
+        "php": php_data
+    }
+    
+    # Show detection results
+    platform_detected = False
+    if platform == "wordpress" and wordpress_data.get("is_wordpress"):
+        platform_detected = True
+        print(f"  {Color.GREEN}✓ WordPress detected{Color.RESET}")
+    elif platform == "joomla" and joomla_data.get("is_joomla"):
+        platform_detected = True
+        print(f"  {Color.GREEN}✓ Joomla detected{Color.RESET}")
+    elif platform == "woocommerce" and woo_data.get("is_woocommerce"):
+        platform_detected = True
+        print(f"  {Color.GREEN}✓ WooCommerce detected{Color.RESET}")
+    elif platform == "laravel" and laravel_data.get("is_laravel"):
+        platform_detected = True
+        print(f"  {Color.GREEN}✓ Laravel detected{Color.RESET}")
+    elif platform == "php" and php_data.get("is_php"):
+        platform_detected = True
+        print(f"  {Color.GREEN}✓ PHP application detected{Color.RESET}")
+    else:
+        print(f"  {Color.YELLOW}- {platform.title()} not detected, but scanning anyway{Color.RESET}")
+    
+    # Run CVE tests for the specific platform
+    print(f"\n{Color.BOLD}[2/2] {platform.title()} CVE Testing...{Color.RESET}")
+    all_cve_results = []
+    
+    if platform == "wordpress" and (platform_detected or True):
+        wp_results = test_wordpress_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(wp_results)
+    elif platform == "joomla" and (platform_detected or True):
+        joomla_results = test_joomla_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(joomla_results)
+    elif platform == "woocommerce" and (platform_detected or True):
+        woo_results = test_woocommerce_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(woo_results)
+    elif platform == "laravel" and (platform_detected or True):
+        laravel_results = test_laravel_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(laravel_results)
+    elif platform == "php" and (platform_detected or True):
+        php_results = test_php_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(php_results)
+    
+    auto_results["tests"]["cves"] = all_cve_results
+    
+    # Show CVE summary
+    if all_cve_results:
+        vulnerable_count = sum(1 for c in all_cve_results if c.get("vulnerable") is True)
+        print(f"  Found {vulnerable_count} potential vulnerabilities")
+    else:
+        print(f"  No CVE tests were run")
+
+
+def run_comprehensive_scan(url, verbose, auto_results, use_apis=True):
+    """Run full comprehensive scan (original auto mode)."""
+    # This will contain the original auto mode logic that we had before
+    # WordPress Detection
     print(f"{Color.BOLD}[1/5] WordPress Detection...{Color.RESET}")
     wordpress_data = detect_wordpress(url)
     auto_results["tests"]["wordpress"] = wordpress_data
@@ -1139,17 +1749,75 @@ def auto_mode_test(url, verbose=False, output_file=None):
     else:
         print(f"{Color.YELLOW}  - Not a WordPress site{Color.RESET}")
     
-    # 2. CVE Testing (if WordPress)
+    # Platform Detection & CVE Testing (original comprehensive logic)
+    print(f"\n{Color.BOLD}[2/5] Platform Detection & CVE Testing...{Color.RESET}")
+    
+    # Detect all platforms
+    joomla_data = detect_joomla(url)
+    woo_data = detect_woocommerce(url)
+    laravel_data = detect_laravel(url)
+    php_data = detect_php_application(url)
+    
+    # Store platform detection results
+    auto_results["tests"]["platform_detection"] = {
+        "joomla": joomla_data,
+        "woocommerce": woo_data,
+        "laravel": laravel_data,
+        "php": php_data
+    }
+    
+    # Show platform detection results
+    detected_platforms = []
+    if joomla_data and joomla_data.get("is_joomla"):
+        detected_platforms.append("Joomla")
+        print(f"  {Color.GREEN}✓ Joomla detected{Color.RESET}")
+    if woo_data and woo_data.get("is_woocommerce"):
+        detected_platforms.append("WooCommerce")
+        print(f"  {Color.GREEN}✓ WooCommerce detected{Color.RESET}")
+    if laravel_data and laravel_data.get("is_laravel"):
+        detected_platforms.append("Laravel")
+        print(f"  {Color.GREEN}✓ Laravel detected{Color.RESET}")
+    if php_data and php_data.get("is_php"):
+        detected_platforms.append("PHP")
+        print(f"  {Color.GREEN}✓ PHP application detected{Color.RESET}")
     if wordpress_data and wordpress_data.get("is_wordpress"):
-        print(f"\n{Color.BOLD}[2/5] WordPress CVE Testing...{Color.RESET}")
-        cve_results = test_wordpress_cves(url, verbose=verbose)
-        auto_results["tests"]["cves"] = cve_results
-        
-        vulnerable_count = sum(1 for c in cve_results if c.get("vulnerable") is True)
-        print(f"  Found {vulnerable_count} potential vulnerabilities")
-    else:
-        print(f"\n{Color.BOLD}[2/5] General Vulnerability Testing...{Color.RESET}")
-        # Test for general vulnerabilities
+        detected_platforms.append("WordPress")
+        print(f"  {Color.GREEN}✓ WordPress detected{Color.RESET}")
+    
+    if not detected_platforms:
+        print(f"  {Color.YELLOW}- No specific platforms detected, running general vulnerability tests{Color.RESET}")
+    
+    # Run CVE tests for detected platforms
+    all_cve_results = []
+    
+    if wordpress_data and wordpress_data.get("is_wordpress"):
+        print(f"\n  {Color.CYAN}Testing WordPress CVEs...{Color.RESET}")
+        wp_results = test_wordpress_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(wp_results)
+    
+    if joomla_data and joomla_data.get("is_joomla"):
+        print(f"\n  {Color.CYAN}Testing Joomla CVEs...{Color.RESET}")
+        joomla_results = test_joomla_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(joomla_results)
+    
+    if woo_data and woo_data.get("is_woocommerce"):
+        print(f"\n  {Color.CYAN}Testing WooCommerce CVEs...{Color.RESET}")
+        woo_results = test_woocommerce_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(woo_results)
+    
+    if laravel_data and laravel_data.get("is_laravel"):
+        print(f"\n  {Color.CYAN}Testing Laravel CVEs...{Color.RESET}")
+        laravel_results = test_laravel_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(laravel_results)
+    
+    if php_data and php_data.get("is_php"):
+        print(f"\n  {Color.CYAN}Testing PHP CVEs...{Color.RESET}")
+        php_results = test_php_cves(url, verbose=verbose, use_apis=use_apis)
+        all_cve_results.extend(php_results)
+    
+    # If no platforms detected, run general vulnerability tests
+    if not detected_platforms:
+        print(f"\n  {Color.CYAN}Running general vulnerability tests...{Color.RESET}")
         test_params = {
             "id[$ne]": "1",
             "user[$exists]": "true"
@@ -1159,23 +1827,33 @@ def auto_mode_test(url, verbose=False, output_file=None):
             indicators = detect_vulnerability_indicators(resp, test_params)
             auto_results["tests"]["general_vulns"] = [{"level": level, "message": msg} for level, msg in indicators]
             if indicators:
-                print(f"  ⚠️  Found {len(indicators)} potential issue(s)")
+                print(f"    ⚠️  Found {len(indicators)} potential issue(s)")
             else:
-                print(f"  ✓ No obvious vulnerabilities detected")
+                print(f"    ✓ No obvious vulnerabilities detected")
         except requests.Timeout:
-            print(f"  {Color.YELLOW}⏱ Request timeout (target slow or unreachable){Color.RESET}")
+            print(f"    {Color.YELLOW}⏱ Request timeout (target slow or unreachable){Color.RESET}")
             auto_results["tests"]["general_vulns"] = []
         except requests.ConnectionError:
-            print(f"  {Color.RED}✗ Connection failed (unable to reach target){Color.RESET}")
+            print(f"    {Color.RED}✗ Connection failed (unable to reach target){Color.RESET}")
             auto_results["tests"]["general_vulns"] = []
         except requests.exceptions.InvalidURL:
-            print(f"  {Color.RED}✗ Invalid URL format{Color.RESET}")
+            print(f"    {Color.RED}✗ Invalid URL format{Color.RESET}")
             auto_results["tests"]["general_vulns"] = []
         except Exception as e:
-            print(f"  {Color.YELLOW}⚠ Skipped: {str(e)}{Color.RESET}")
+            print(f"    {Color.YELLOW}⚠ Skipped: {str(e)}{Color.RESET}")
             auto_results["tests"]["general_vulns"] = []
     
-    # 3. Server & Port Detection
+    # Store CVE results
+    auto_results["tests"]["cves"] = all_cve_results
+    
+    # Show CVE summary
+    if all_cve_results:
+        vulnerable_count = sum(1 for c in all_cve_results if c.get("vulnerable") is True)
+        print(f"\n  CVE Testing Summary: {vulnerable_count} potential vulnerabilities found")
+    else:
+        print(f"\n  CVE Testing Summary: No CVE tests were run")
+    
+    # Server & Port Detection
     print(f"\n{Color.BOLD}[3/5] Server & Port Detection...{Color.RESET}")
     server_info = detect_server_and_ports(url, verbose=False)
     auto_results["tests"]["server_info"] = server_info
@@ -1186,7 +1864,7 @@ def auto_mode_test(url, verbose=False, output_file=None):
         for port_info in server_info['open_ports']:
             print(f"    - {port_info['port']}/{port_info['service']}")
     
-    # 4. Security Headers Analysis
+    # Security Headers Analysis
     print(f"\n{Color.BOLD}[4/5] Security Headers Analysis...{Color.RESET}")
     headers_analysis = analyze_security_headers(url, verbose=False)
     auto_results["tests"]["security_headers"] = headers_analysis
@@ -1197,44 +1875,126 @@ def auto_mode_test(url, verbose=False, output_file=None):
         for missing in headers_analysis['missing'][:3]:
             print(f"    - {missing}")
     
-    # 5. Summary & Report
-    print(f"\n{Color.BOLD}[5/5] Generating Comprehensive Report...{Color.RESET}")
+    # Store for summary generation
+    auto_results["_temp"] = {
+        "all_cve_results": all_cve_results,
+        "detected_platforms": detected_platforms,
+        "headers_analysis": headers_analysis,
+        "server_info": server_info
+    }
+
+
+def generate_scan_summary(auto_results, mode):
+    """Generate final scan summary based on mode."""
+    if mode == "headers":
+        headers_analysis = auto_results["tests"]["security_headers"]
+        print(f"\n{Color.BOLD}{Color.BLUE}{'='*60}")
+        print(f"SECURITY HEADERS SUMMARY")
+        print(f"{'='*60}{Color.RESET}\n")
+        
+        print(f"Target                 : {auto_results['url']}")
+        score_str = f"{headers_analysis['score']}/{headers_analysis['max_score']}"
+        score_color = Color.GREEN if headers_analysis['score'] >= 80 else Color.YELLOW if headers_analysis['score'] >= 60 else Color.RED
+        print(f"Security Score         : {colorize(score_str, score_color)}")
+        
+    elif mode == "server":
+        server_info = auto_results["tests"]["server_info"]
+        print(f"\n{Color.BOLD}{Color.BLUE}{'='*60}")
+        print(f"SERVER DETECTION SUMMARY")
+        print(f"{'='*60}{Color.RESET}\n")
+        
+        print(f"Target                 : {auto_results['url']}")
+        print(f"Server                 : {server_info['server']}")
+        if server_info['open_ports']:
+            print(f"Open Ports             : {len(server_info['open_ports'])}")
+        
+    elif mode == "stealth":
+        server_info = auto_results["tests"]["server_info"]
+        detected_platforms = []
+        
+        # Check detected platforms
+        if auto_results["tests"]["wordpress"].get("is_wordpress"):
+            detected_platforms.append("WordPress")
+        if auto_results["tests"]["platform_detection"]["joomla"].get("is_joomla"):
+            detected_platforms.append("Joomla")
+        if auto_results["tests"]["platform_detection"]["woocommerce"].get("is_woocommerce"):
+            detected_platforms.append("WooCommerce")
+        if auto_results["tests"]["platform_detection"]["laravel"].get("is_laravel"):
+            detected_platforms.append("Laravel")
+        if auto_results["tests"]["platform_detection"]["php"].get("is_php"):
+            detected_platforms.append("PHP")
+        
+        print(f"\n{Color.BOLD}{Color.BLUE}{'='*60}")
+        print(f"STEALTH SCAN SUMMARY")
+        print(f"{'='*60}{Color.RESET}\n")
+        
+        print(f"Target                 : {auto_results['url']}")
+        platforms_str = ", ".join(detected_platforms) if detected_platforms else "None detected"
+        print(f"Detected Platforms     : {colorize(platforms_str, Color.GREEN if detected_platforms else Color.YELLOW)}")
+        print(f"Server                 : {server_info['server']}")
+        print(f"Scan Type              : {Color.GREEN}Passive (No active testing){Color.RESET}")
+        
+    elif mode in ["wordpress", "joomla", "woocommerce", "laravel", "php"]:
+        all_cve_results = auto_results["tests"]["cves"]
+        vuln_count = sum(1 for c in all_cve_results if c.get("vulnerable") is True) if all_cve_results else 0
+        
+        print(f"\n{Color.BOLD}{Color.BLUE}{'='*60}")
+        print(f"{mode.upper()} SECURITY SUMMARY")
+        print(f"{'='*60}{Color.RESET}\n")
+        
+        print(f"Target                 : {auto_results['url']}")
+        print(f"Scan Mode              : {mode.title()} Only")
+        print(f"Vulnerabilities Found  : {colorize(str(vuln_count), Color.RED if vuln_count > 0 else Color.GREEN)}")
+        
+    else:  # auto mode - comprehensive
+        temp = auto_results.get("_temp", {})
+        all_cve_results = temp.get("all_cve_results", [])
+        detected_platforms = temp.get("detected_platforms", [])
+        headers_analysis = temp.get("headers_analysis", {})
+        server_info = temp.get("server_info", {})
+        
+        # Count findings
+        vuln_count = 0
+        if all_cve_results:
+            vuln_count += sum(1 for c in all_cve_results if c.get("vulnerable") is True)
+        vuln_count += len(auto_results["tests"].get("general_vulns", []))
+        vuln_count += len(headers_analysis.get('missing', []))
+        
+        print(f"\n{Color.BOLD}{Color.BLUE}{'='*60}")
+        print(f"AUTO TEST SUMMARY")
+        print(f"{'='*60}{Color.RESET}\n")
+        
+        print(f"Target                 : {auto_results['url']}")
+        
+        # Show detected platforms
+        platforms_str = ", ".join(detected_platforms) if detected_platforms else "None detected"
+        print(f"Detected Platforms     : {colorize(platforms_str, Color.GREEN if detected_platforms else Color.YELLOW)}")
+        
+        print(f"Vulnerabilities Found  : {colorize(str(vuln_count), Color.RED if vuln_count > 0 else Color.GREEN)}")
+        score_str = f"{headers_analysis.get('score', 0)}/{headers_analysis.get('max_score', 100)}"
+        score_color = Color.GREEN if headers_analysis.get('score', 0) >= 80 else Color.YELLOW if headers_analysis.get('score', 0) >= 60 else Color.RED
+        print(f"Security Score         : {colorize(score_str, score_color)}")
+        print(f"Server                 : {server_info.get('server', 'Unknown')}")
     
-    # Count findings
-    vuln_count = 0
-    if wordpress_data and wordpress_data.get("is_wordpress"):
-        vuln_count += sum(1 for c in cve_results if c.get("vulnerable") is True)
-    vuln_count += len(auto_results["tests"].get("general_vulns", []))
-    vuln_count += len(headers_analysis['missing'])
-    
-    print(f"\n{Color.BOLD}{Color.BLUE}{'='*60}")
-    print(f"AUTO TEST SUMMARY")
-    print(f"{'='*60}{Color.RESET}\n")
-    
-    print(f"Target                 : {url}")
-    print(f"WordPress              : {colorize('YES' if wordpress_data and wordpress_data.get('is_wordpress') else 'NO', Color.GREEN if wordpress_data and wordpress_data.get('is_wordpress') else Color.YELLOW)}")
-    print(f"Vulnerabilities Found  : {colorize(str(vuln_count), Color.RED if vuln_count > 0 else Color.GREEN)}")
-    score_str = f"{headers_analysis['score']}/{headers_analysis['max_score']}"
-    score_color = Color.GREEN if headers_analysis['score'] >= 80 else Color.YELLOW if headers_analysis['score'] >= 60 else Color.RED
-    print(f"Security Score         : {colorize(score_str, score_color)}")
-    print(f"Server                 : {server_info['server']}")
-    
-    # Save report if requested
-    if output_file:
-        try:
-            # Ensure output file is in reports directory
-            if not os.path.dirname(output_file):
-                reports_dir = os.path.join(os.path.dirname(__file__), "reports")
-                os.makedirs(reports_dir, exist_ok=True)
-                output_file = os.path.join(reports_dir, output_file)
-            
-            with open(output_file, 'w') as f:
-                json.dump(auto_results, f, indent=2)
-            print(f"\n{Color.GREEN}✓ Report saved to: {output_file}{Color.RESET}")
-        except Exception as e:
-            print(f"\n{Color.RED}✗ Error saving report: {e}{Color.RESET}")
-    
-    return auto_results
+    # Clean up temp data
+    if "_temp" in auto_results:
+        del auto_results["_temp"]
+
+
+def save_scan_report(auto_results, output_file):
+    """Save scan report to file."""
+    try:
+        # Ensure output file is in reports directory
+        if not os.path.dirname(output_file):
+            reports_dir = os.path.join(os.path.dirname(__file__), "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            output_file = os.path.join(reports_dir, output_file)
+        
+        with open(output_file, 'w') as f:
+            json.dump(auto_results, f, indent=2)
+        print(f"\n{Color.GREEN}✓ Report saved to: {output_file}{Color.RESET}")
+    except Exception as e:
+        print(f"\n{Color.RED}✗ Error saving report: {e}{Color.RESET}")
 
 def main():
     import sys
@@ -1245,6 +2005,8 @@ def main():
     output_file = None
     auto = "--auto" in sys.argv
     target = None
+    mode = "auto"
+    use_apis = "--no-apis" not in sys.argv
     
     # Check for -o option
     if "-o" in sys.argv:
@@ -1258,6 +2020,12 @@ def main():
         if t_index + 1 < len(sys.argv):
             target = sys.argv[t_index + 1]
     
+    # Check for --mode option
+    if "--mode" in sys.argv:
+        m_index = sys.argv.index("--mode")
+        if m_index + 1 < len(sys.argv):
+            mode = sys.argv[m_index + 1].lower()
+    
     if verbose:
         print(colorize("[INFO] Verbose mode enabled", Color.CYAN))
     if show_full:
@@ -1265,13 +2033,14 @@ def main():
     if output_file:
         print(colorize(f"[INFO] JSON report will be saved to: {output_file}", Color.CYAN))
     if auto:
-        print(colorize("[INFO] Auto mode enabled", Color.CYAN))
+        api_status = "enabled" if use_apis else "disabled"
+        print(colorize(f"[INFO] Auto mode enabled with {mode} scan (APIs: {api_status})", Color.CYAN))
         if not target:
             url = prompt("Target URL")
         else:
             url = target
             print(colorize(f"[INFO] Target: {url}", Color.CYAN))
-        auto_mode_test(url, verbose=verbose, output_file=output_file)
+        auto_mode_test(url, verbose=verbose, output_file=output_file, mode=mode, use_apis=use_apis)
         return
     
     while True:

@@ -53,7 +53,7 @@ _CVE_FIXES_CACHE = {}
 _CVE_FIXES_MTIME = 0.0
 _HEADER_FIXES_CACHE = {}
 _HEADER_FIXES_MTIME = 0.0
-CVE_LIBRARY = CVELibrary()
+CVE_LIBRARY = CVELibrary(use_custom_delta=True)
 
 HEADER_MESSAGE_TO_NAME = {
     "HSTS not configured": "Strict-Transport-Security",
@@ -443,13 +443,55 @@ def _load_cve_detail(cve_id: str) -> Tuple[Optional[CVEEntry], Optional[dict]]:
     return entry, record
 
 
-def _build_cve_search_results(query: str, limit: int = 30) -> dict:
-    matches = CVE_LIBRARY.search(query, limit=limit)
-    return {
+# Cache for search results to avoid re-computation
+_SEARCH_CACHE = {}
+_CACHE_TTL = 300  # 5 minutes
+
+def _build_cve_search_results(query: str, limit: int = 1000) -> dict:
+    # Check cache first
+    cache_key = f"all:{query}"  # Remove limit from cache key since we want all results
+    current_time = time.time()
+    
+    if cache_key in _SEARCH_CACHE:
+        cached_data, cached_time = _SEARCH_CACHE[cache_key]
+        if current_time - cached_time < _CACHE_TTL:
+            logger.debug(f"Cache hit for search: {query}")
+            return cached_data
+    
+    # Perform search with higher limit to get more results
+    start_time = time.time()
+    matches = CVE_LIBRARY.search(query, limit=limit)  # Get more results but not unlimited
+    search_time = time.time() - start_time
+    
+    optimization_info = CVE_LIBRARY.get_search_optimization_info(query)
+    result = {
         "query": query,
         "count": len(matches),
-        "results": [_serialize_cve_entry(entry) for entry in matches],
+        "results": [
+            {
+                "id": entry.cve_id,
+                "year": entry.year,
+                "timestamp": entry.iso_date().isoformat() if entry.iso_date() != datetime.min else "unknown",
+                "kind": entry.kind,
+            }
+            for entry in matches
+        ],
+        "optimization": optimization_info,
+        "search_time_ms": f"{search_time * 1000:.1f}",
+        "limit_applied": limit if len(matches) >= limit else None
     }
+    
+    # Cache the result
+    _SEARCH_CACHE[cache_key] = (result, current_time)
+    
+    # Clean old cache entries periodically
+    if len(_SEARCH_CACHE) > 50:  # Reduce cache size since results are larger
+        keys_to_remove = [k for k, (_, t) in _SEARCH_CACHE.items() if current_time - t > _CACHE_TTL]
+        for k in keys_to_remove[:25]:  # Remove oldest 25
+            del _SEARCH_CACHE[k]
+    
+    logger.info(f"Search completed: {query} ({len(matches)} results, {search_time*1000:.1f}ms)")
+    return result
 
 
 def _extract_cve_metadata(record: Optional[dict]) -> dict:
@@ -533,6 +575,7 @@ def _load_settings():
                 "vulndb_api_key": "",
                 "feed_update_interval": {"value": 1, "unit": "hours"},
                 "enable_real_time_scans": False,
+                "use_apis": True,
                 "last_feed_update": None
             }
         with open(SETTINGS_PATH, 'r') as f:
@@ -571,12 +614,20 @@ def _lookup_cve_with_nvd(cve_id: str):
         return None
     
     try:
-        # Use NVDLib to fetch CVE details
-        cve = nvdlib.getCVE(cve_id, key=api_key)
+        # Use NVDLib searchCVE (latest API)
+        cve = None
+        if hasattr(nvdlib, 'searchCVE'):
+            results = nvdlib.searchCVE(cveId=cve_id, key=api_key)
+            if results:
+                cve = results[0]
+        else:
+            logger.error("Installed nvdlib version does not provide searchCVE")
+            return None
+        
         if cve:
             return {
                 'id': cve.id,
-                'description': cve.description[0].value if cve.description else '',
+                'description': cve.descriptions[0].value if cve.descriptions else '',
                 'severity': cve.v31severity if hasattr(cve, 'v31severity') else cve.v2severity,
                 'score': cve.v31score if hasattr(cve, 'v31score') else cve.v2score,
                 'published': cve.publishedDate,
@@ -861,13 +912,70 @@ async def index(request: Request):
     return templates.TemplateResponse('dashboard.html', context)
 
 
+@app.get("/api/cves/search")
+async def api_cve_search(request: Request):
+    """API endpoint for AJAX CVE search with pagination."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    
+    query = request.query_params.get('query', '').strip()
+    offset = int(request.query_params.get('offset', 0))
+    limit = int(request.query_params.get('limit', 30))
+    sort_order = request.query_params.get('sort', 'newest')  # Default to newest first
+    
+    if not query:
+        return JSONResponse({"error": "Query parameter required"}, status_code=400)
+    
+    try:
+        # Perform search with higher limit to get more results for pagination
+        all_results = CVE_LIBRARY.search(query, limit=None)
+        total_count = len(all_results)
+        
+        # Sort results based on request
+        if sort_order == 'oldest':
+            all_results.sort(key=lambda entry: entry.iso_date())  # Oldest first
+        else:
+            all_results.sort(key=lambda entry: entry.iso_date(), reverse=True)  # Newest first
+        
+        # Get the requested slice
+        paginated_results = all_results[offset:offset + limit]
+        
+        # Convert to API format
+        results_data = [
+            {
+                "id": entry.cve_id,
+                "year": entry.year,
+                "timestamp": entry.iso_date().isoformat() if entry.iso_date() != datetime.min else "unknown",
+                "kind": entry.kind,
+            }
+            for entry in paginated_results
+        ]
+        
+        return JSONResponse({
+            "query": query,
+            "results": results_data,
+            "count": total_count,
+            "offset": offset,
+            "limit": limit,
+            "sort": sort_order,
+            "has_more": offset + limit < total_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in API search: {e}")
+        return JSONResponse({"error": f"Search failed: {str(e)}"}, status_code=500)
+
+
 @app.get("/cves", response_class=HTMLResponse)
 async def cve_search_view(request: Request, query: str = ""):
     user = await _get_user(request)
     if not user:
         return RedirectResponse(url='/login', status_code=303)
 
-    years = _list_year_summaries(limit_per_year=12)
+    # Only load year summaries if no query (initial page load)
+    # For searches, we don't need the year buckets to avoid the performance bottleneck
+    years = _list_year_summaries(limit_per_year=12) if not query else []
     search_results = _build_cve_search_results(query) if query else None
     context = {
         "request": request,
@@ -941,6 +1049,7 @@ async def run_scan(request: Request):
     form = await request.form()
     target = form.get('target')
     mode = form.get('mode') or 'auto'
+    use_apis = form.get('use-apis', 'true').lower() == 'true'
 
     if not target:
         return JSONResponse({"error": "target required"}, status_code=400)
@@ -956,7 +1065,7 @@ async def run_scan(request: Request):
     JOBS[job_id] = {"history": [], "queue": queue, "status": "queued", "outpath": outpath, "target": target, "user_id": user["user_id"]}
 
     # start background task
-    asyncio.create_task(_run_httpmr_job(job_id, target, outpath, mode, user["user_id"]))
+    asyncio.create_task(_run_httpmr_job(job_id, target, outpath, mode, user["user_id"], use_apis))
 
     return JSONResponse({"job_id": job_id, "outpath": outpath})
 
@@ -1001,7 +1110,7 @@ async def ws_logs(websocket: WebSocket, job_id: str):
         return
 
 
-async def _run_httpmr_job(job_id: str, target: str, outpath: str, mode: str = 'auto', user_id: int = None):
+async def _run_httpmr_job(job_id: str, target: str, outpath: str, mode: str = 'auto', user_id: int = None, use_apis: bool = True):
     """Run HTTPMR.py in a subprocess and stream logs to JOBS[job_id]."""
     async with JOBS_LOCK:
         job = JOBS.get(job_id)
@@ -1009,7 +1118,11 @@ async def _run_httpmr_job(job_id: str, target: str, outpath: str, mode: str = 'a
             return
         job['status'] = 'running'
 
-    cmd = [sys.executable, os.path.join(BASE_DIR, 'HTTPMR.py'), '--auto', '--target', target, '-o', outpath, '--verbose']
+    cmd = [sys.executable, os.path.join(BASE_DIR, 'HTTPMR.py'), '--auto', '--target', target, '-o', outpath, '--verbose', '--mode', mode]
+    
+    # Add --no-apis flag if APIs are disabled
+    if not use_apis:
+        cmd.append('--no-apis')
 
     # start subprocess
     proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
@@ -1059,20 +1172,18 @@ async def view_report(request: Request, name: str):
     for cve in tests.get('cves', []) or []:
         cve_id = cve.get('cve') or cve.get('id')
         if cve_id:
-            # Check for local fix first
+            # Check for local fix only - API data should already be in the report
             has_local_fix = bool(_get_cve_fix(cve_id))
             
-            # Try to get data from all available APIs
-            nvd_data = _lookup_cve_with_nvd(cve_id)
-            exploitdb_data = _lookup_exploitdb(cve_id)
-            vulndb_data = _lookup_vulndb(cve_id)
+            # Use existing external_data from the scan, don't make new API calls
+            external_data = cve.get('external_data', {})
             
             cve_fix_map[cve_id] = {
                 'has_local_fix': has_local_fix,
-                'nvd_data': nvd_data,
-                'exploitdb_data': exploitdb_data,
-                'vulndb_data': vulndb_data,
-                'has_external_data': bool(nvd_data or exploitdb_data or vulndb_data)
+                'nvd_data': external_data.get('nvd'),
+                'exploitdb_data': external_data.get('exploitdb'),
+                'vulndb_data': external_data.get('vulndb'),
+                'has_external_data': external_data.get('has_external_data', False)
             }
 
     security_headers = tests.get('security_headers') or {}
@@ -1405,8 +1516,35 @@ async def get_settings_status(request: Request):
         "has_exploitdb_key": bool(settings.get('exploitdb_api_key')),
         "has_vulndb_key": bool(settings.get('vulndb_api_key')),
         "feed_update_interval": settings.get('feed_update_interval', {'value': 1, 'unit': 'hours'}),
+        "use_apis": settings.get('use_apis', True),
         "rate_limits": rate_limit_status
     })
+
+
+@app.post('/api/settings/use-apis')
+async def save_use_apis_setting(request: Request):
+    """API endpoint to save the use_apis toggle state."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    
+    try:
+        data = await request.json()
+        use_apis = data.get('use_apis')
+        
+        if isinstance(use_apis, bool):
+            settings = _load_settings()
+            settings['use_apis'] = use_apis
+            
+            if _save_settings(settings):
+                return JSONResponse({"success": True, "use_apis": use_apis})
+            else:
+                return JSONResponse({"error": "Failed to save setting"}, status_code=500)
+        else:
+            return JSONResponse({"error": "Invalid value for use_apis"}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error saving use_apis setting: {str(e)}")
+        return JSONResponse({"error": "Server error"}, status_code=500)
 
 
 @app.get('/header_fix/{header_name}', response_class=HTMLResponse)
@@ -1437,3 +1575,123 @@ async def header_fix_page(request: Request, header_name: str):
             "username": user["username"],
         },
     )
+
+
+@app.post('/api/cves/update_delta')
+async def update_cve_delta(request: Request):
+    """Update the CVE delta database by re-scanning the CVE directory."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    
+    try:
+        # Import and run the scanner
+        import sys
+        from pathlib import Path
+        
+        # Add the parent directory to the path to import our modules
+        parent_dir = Path(__file__).parent.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        
+        from cve_scanner import scan_cve_directory, create_custom_delta, update_cve_timestamps, save_custom_delta
+        
+        # Re-scan the CVE directory
+        year_to_cves = scan_cve_directory()
+        
+        if not year_to_cves:
+            return JSONResponse({"error": "No CVE files found during scan"}, status_code=500)
+        
+        # Create new delta
+        delta = create_custom_delta(year_to_cves)
+        delta = update_cve_timestamps(delta)
+        save_custom_delta(delta)
+        
+        # Reload the CVE library to pick up new data
+        global CVE_LIBRARY
+        CVE_LIBRARY = CVELibrary(use_custom_delta=True)
+        
+        return JSONResponse({
+            "success": True, 
+            "message": f"CVE delta updated successfully with {delta['totalCVEs']} CVEs",
+            "totalCVEs": delta['totalCVEs'],
+            "years": len(delta['years'])
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating CVE delta: {e}")
+        return JSONResponse({"error": f"Failed to update CVE delta: {str(e)}"}, status_code=500)
+
+
+@app.get('/api/cves/year_buckets')
+async def get_year_buckets(request: Request):
+    """Get year buckets for CVE catalog via AJAX."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    
+    try:
+        years = _list_year_summaries(limit_per_year=12)
+        return JSONResponse({
+            "year_buckets": years
+        })
+    except Exception as e:
+        logger.error(f"Error getting year buckets: {e}")
+        return JSONResponse({"error": f"Failed to get year buckets: {str(e)}"}, status_code=500)
+
+
+@app.get('/api/cves/search_progress')
+async def get_search_progress(request: Request):
+    """Get real-time search progress information."""
+    user = await _get_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    
+    query = request.query_params.get('query', '').strip()
+    if not query:
+        return JSONResponse({"error": "Query parameter required"}, status_code=400)
+    
+    try:
+        # Get optimization info to calculate progress
+        optimization_info = CVE_LIBRARY.get_search_optimization_info(query)
+        
+        if optimization_info.get("optimization_applied"):
+            # Calculate total CVEs to search through efficiently
+            years_searched = optimization_info["years_searched"]
+            min_year = optimization_info.get("min_year", 1999)
+            
+            # Get counts efficiently without iterating through every year
+            available_years = CVE_LIBRARY.list_years()
+            total_cv_es = len(CVE_LIBRARY._entries) if CVE_LIBRARY._loaded else 0
+            
+            # Calculate searched CVEs by counting entries in optimized years
+            searched_cv_es = 0
+            for year in available_years:
+                if year >= min_year:
+                    searched_cv_es += len(CVE_LIBRARY._by_year.get(year, []))
+            
+            return JSONResponse({
+                "query": query,
+                "optimization_applied": True,
+                "platform": optimization_info.get("platform"),
+                "min_year": min_year,
+                "total_cv_es_available": total_cv_es,
+                "cv_es_to_search": searched_cv_es,
+                "year_reduction": f"{years_searched}/{len(available_years)}",
+                "performance_gain": optimization_info.get("performance_gain")
+            })
+        else:
+            # No optimization - search through all CVEs
+            total_cv_es = len(CVE_LIBRARY._entries) if CVE_LIBRARY._loaded else 0
+            return JSONResponse({
+                "query": query,
+                "optimization_applied": False,
+                "total_cv_es_available": total_cv_es,
+                "cv_es_to_search": total_cv_es,
+                "year_reduction": "all years",
+                "performance_gain": "0%"
+            })
+            
+    except Exception as e:
+        logger.error(f"Error getting search progress: {e}")
+        return JSONResponse({"error": f"Failed to get search progress: {str(e)}"}, status_code=500)

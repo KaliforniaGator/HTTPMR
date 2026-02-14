@@ -54,9 +54,24 @@
                             <select id="mode" name="mode">
                                 <option value="auto">Auto (Full Scan)</option>
                                 <option value="wordpress">WordPress Only</option>
+                                <option value="joomla">Joomla Only</option>
+                                <option value="woocommerce">WooCommerce Only</option>
+                                <option value="laravel">Laravel Only</option>
+                                <option value="php">PHP Only</option>
                                 <option value="headers">Security Headers Only</option>
                                 <option value="server">Server Detection Only</option>
+                                <option value="stealth">Stealth Mode (Passive)</option>
                             </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="use-apis" name="use-apis" checked>
+                                <span class="toggle-switch"></span>
+                                Use APIs
+                            </label>
+                            <small style="color: var(--text-muted); display: block; margin-top: 4px;">
+                                Enable external API lookups (NVD, ExploitDB, VulnDB) for enhanced CVE intelligence
+                            </small>
                         </div>
                         <div class="flex gap-md">
                             <button type="submit" class="btn btn-primary">Start Scan</button>
@@ -177,18 +192,56 @@
                     }
                     
                     statusDiv.innerHTML = statusHtml;
+                    
+                    // Set the use-apis toggle state
+                    const useApisCheckbox = document.getElementById('use-apis');
+                    if (useApisCheckbox) {
+                        useApisCheckbox.checked = status.use_apis;
+                    }
                 }
             } catch (error) {
                 console.error('Failed to load settings status:', error);
             }
         }
         
+        // Save use-apis toggle state
+        async function saveUseApisSetting(useApis) {
+            try {
+                const response = await fetch('/api/settings/use-apis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ use_apis: useApis })
+                });
+                
+                if (!response.ok) {
+                    console.error('Failed to save use-apis setting');
+                }
+            } catch (error) {
+                console.error('Error saving use-apis setting:', error);
+            }
+        }
+        
         const scanForm = document.getElementById('scanForm');
         const uploadForm = document.getElementById('uploadForm');
+        const useApisCheckbox = document.getElementById('use-apis');
+
+        // Add event listener for use-apis toggle
+        if (useApisCheckbox) {
+            useApisCheckbox.addEventListener('change', async (ev) => {
+                await saveUseApisSetting(ev.target.checked);
+            });
+        }
 
         scanForm.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             const fd = new FormData(scanForm);
+            
+            // Handle checkbox properly for FormData
+            const useApis = document.getElementById('use-apis').checked;
+            fd.set('use-apis', useApis.toString());
+            
             try {
                 const res = await fetch('/run', {method:'POST', body: fd});
                 const data = await res.json();
