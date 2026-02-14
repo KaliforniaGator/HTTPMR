@@ -15,6 +15,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# GitHub repository URL
+GITHUB_REPO="https://github.com/KaliforniaGator/HTTPMR"
+
 # Function to print colored output
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -48,63 +51,75 @@ fi
 
 print_status "Starting update process..."
 
-# Backup current state (optional but recommended)
+# Check current version
+if [ -f "version" ]; then
+    CURRENT_VERSION=$(cat version)
+    print_status "Current version: $CURRENT_VERSION"
+else
+    print_warning "No version file found - assuming first installation"
+fi
+
+# Check remote version from GitHub
+print_status "Checking remote version..."
+REMOTE_VERSION_CONTENT=$(curl -s "$GITHUB_REPO/raw/HEAD/version" 2>/dev/null || echo "")
+
+if [ -n "$REMOTE_VERSION_CONTENT" ]; then
+    REMOTE_VERSION_LINE=$(echo "$REMOTE_VERSION_CONTENT" | head -n1 | tr -d '\n\r')
+    print_status "Remote version: $REMOTE_VERSION_LINE"
+    
+    # Compare versions
+    if [ -f "version" ]; then
+        if [ "$CURRENT_VERSION" = "$REMOTE_VERSION_LINE" ]; then
+            print_status "You already have the latest version ($REMOTE_VERSION_LINE)"
+            print_status "No update needed."
+            exit 0
+        else
+            print_status "New version available: $REMOTE_VERSION_LINE"
+        fi
+    else
+        print_status "No local version found - will install: $REMOTE_VERSION_LINE"
+    fi
+else
+    print_warning "No version file found in remote repository"
+    print_status "Proceeding with update anyway..."
+fi
+
+# Backup current state
 BACKUP_DIR="backup_$(date +%Y%m%d_%H%M%S)"
 print_warning "Creating backup in $BACKUP_DIR directory..."
 mkdir -p "$BACKUP_DIR"
 cp -r . "$BACKUP_DIR/" 2>/dev/null || true
 
-# Stash any local changes
-if [ -n "$(git status --porcelain)" ]; then
-    print_warning "Local changes detected. Stashing changes..."
-    git stash push -m "Auto-stash before update on $(date)"
-fi
+# Download latest version from GitHub
+print_status "Downloading latest version from GitHub..."
+TEMP_DIR=$(mktemp -d)
 
-# Fetch latest changes from origin
-print_status "Fetching latest changes from GitHub..."
-git fetch origin
+git clone --depth 1 "$GITHUB_REPO" "$TEMP_DIR" || {
+    print_error "Failed to download from GitHub"
+    rm -rf "$TEMP_DIR"
+    exit 1
+}
 
-# Get current branch
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-print_status "Current branch: $CURRENT_BRANCH"
+# Copy files from temp directory, excluding .git and user data
+print_status "Installing new files..."
+rsync -av --exclude='.git' --exclude='backup_*' --exclude='reports' --exclude='.secure' --exclude='.venv' "$TEMP_DIR/" ./
 
-# Check if we're on main/master, switch to main if needed
-if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
-    print_warning "Not on main/master branch. Switching to main branch..."
-    git checkout main 2>/dev/null || git checkout master 2>/dev/null || {
-        print_error "Could not switch to main or master branch"
-        exit 1
-    }
-    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-fi
+# Clean up
+rm -rf "$TEMP_DIR"
 
-# Pull latest changes
-print_status "Pulling latest changes..."
-git pull origin "$CURRENT_BRANCH"
+# Update Python dependencies
+print_status "Updating Python dependencies..."
 
-# Update submodules if any exist
-if [ -f ".gitmodules" ]; then
-    print_status "Updating submodules..."
-    git submodule update --init --recursive
-fi
-
-# Update Python dependencies if requirements.txt changed
-if git diff --name-only HEAD@{1} HEAD | grep -q "requirements.txt"; then
-    print_status "Requirements.txt changed. Updating Python dependencies..."
-    
-    # Check if virtual environment exists
-    if [ -d ".venv" ]; then
-        print_status "Updating dependencies in existing virtual environment..."
-        source .venv/bin/activate
-        pip install -r requirements.txt --upgrade
-    else
-        print_warning "No virtual environment found. Creating new one..."
-        python3 -m venv .venv
-        source .venv/bin/activate
-        pip install -r requirements.txt
-    fi
+# Check if virtual environment exists
+if [ -d ".venv" ]; then
+    print_status "Updating dependencies in existing virtual environment..."
+    source .venv/bin/activate
+    pip install -r requirements.txt --upgrade
 else
-    print_status "No dependency updates needed."
+    print_warning "No virtual environment found. Creating new one..."
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
 fi
 
 # Clean up Python cache
@@ -116,19 +131,20 @@ find . -name "*.pyc" -delete 2>/dev/null || true
 print_status "Making scripts executable..."
 chmod +x run_webui.sh clean_pycache.sh update.sh 2>/dev/null || true
 
-# Get version information
-COMMIT_HASH=$(git rev-parse --short HEAD)
-COMMIT_DATE=$(git log -1 --format="%ci" HEAD)
-REMOTE_URL=$(git remote get-url origin)
+# Get final version
+if [ -f "version" ]; then
+    FINAL_VERSION=$(cat version)
+else
+    FINAL_VERSION="Unknown"
+fi
 
 print_status "Update completed successfully!"
 echo ""
 echo "=========================================="
 echo "Update Summary:"
 echo "=========================================="
-echo "Repository: $REMOTE_URL"
-echo "Latest Commit: $COMMIT_HASH"
-echo "Commit Date: $COMMIT_DATE"
+echo "Repository: $GITHUB_REPO"
+echo "Version: $FINAL_VERSION"
 echo "Backup created: $BACKUP_DIR"
 echo ""
 echo "To restore backup if needed:"
@@ -140,11 +156,5 @@ echo ""
 echo "To run CLI tools:"
 echo "  python HTTPMR.py --help"
 echo "=========================================="
-
-# Check if there were stashed changes
-if git stash list | grep -q "Auto-stash before update"; then
-    print_warning "You have stashed local changes."
-    print_warning "To restore them run: git stash pop"
-fi
 
 exit 0

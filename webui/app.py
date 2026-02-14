@@ -59,6 +59,19 @@ _HEADER_FIXES_CACHE = {}
 _HEADER_FIXES_MTIME = 0.0
 CVE_LIBRARY = CVELibrary(use_custom_delta=True)
 
+# Version information
+VERSION_PATH = os.path.join(BASE_DIR, "version")
+def get_version():
+    """Get version information from version file."""
+    try:
+        if os.path.exists(VERSION_PATH):
+            with open(VERSION_PATH, 'r') as f:
+                lines = f.read().strip().split('\n')
+                return lines[0].strip()  # Return only the first line (version number)
+        return "Unknown"
+    except Exception:
+        return "Unknown"
+
 HEADER_MESSAGE_TO_NAME = {
     "HSTS not configured": "Strict-Transport-Security",
     "MIME type sniffing not prevented": "X-Content-Type-Options",
@@ -912,6 +925,7 @@ async def index(request: Request):
         "username": user["username"],
         "sort_options": SORT_OPTIONS,
         "current_sort": sort_option["value"],
+        "version": get_version(),
     }
     return templates.TemplateResponse('dashboard.html', context)
 
