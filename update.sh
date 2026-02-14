@@ -17,6 +17,7 @@ NC='\033[0m' # No Color
 
 # GitHub repository URL
 GITHUB_REPO="https://github.com/KaliforniaGator/HTTPMR"
+GITHUB_RAW_URL="https://raw.githubusercontent.com/KaliforniaGator/HTTPMR/refs/heads/main"
 
 # Function to print colored output
 print_status() {
@@ -61,7 +62,7 @@ fi
 
 # Check remote version from GitHub
 print_status "Checking remote version..."
-REMOTE_VERSION_CONTENT=$(curl -s "$GITHUB_REPO/raw/HEAD/version" 2>/dev/null || echo "")
+REMOTE_VERSION_CONTENT=$(curl -s "$GITHUB_RAW_URL/version" 2>/dev/null || echo "")
 
 if [ -n "$REMOTE_VERSION_CONTENT" ]; then
     REMOTE_VERSION_LINE=$(echo "$REMOTE_VERSION_CONTENT" | head -n1 | tr -d '\n\r')
