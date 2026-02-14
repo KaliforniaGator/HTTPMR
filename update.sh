@@ -89,7 +89,12 @@ fi
 BACKUP_DIR="backup_$(date +%Y%m%d_%H%M%S)"
 print_warning "Creating backup in $BACKUP_DIR directory..."
 mkdir -p "$BACKUP_DIR"
-cp -r . "$BACKUP_DIR/" 2>/dev/null || true
+
+# Create backup excluding large/unnecessary directories
+rsync -av --exclude='cves' --exclude='reports' --exclude='.venv' --exclude='backup_*' . "$BACKUP_DIR/" 2>/dev/null || {
+    print_warning "rsync not available, falling back to cp"
+    cp -r . "$BACKUP_DIR/" 2>/dev/null || true
+}
 
 # Download latest version from GitHub
 print_status "Downloading latest version from GitHub..."
