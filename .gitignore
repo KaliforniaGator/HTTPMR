@@ -2,6 +2,8 @@
 reports/
 .secure/httpmr.db
 .secure/seetings.config.backup
+.secure/cve_delta.json
 __pycache__
 cves/
 cves/*
+.venv/
